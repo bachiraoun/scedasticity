@@ -1,0 +1,933 @@
+# python standard libraries imports
+import os
+import warnings
+
+# import numpy
+try:
+    import numpy as np
+    from numpy.linalg import norm
+except:
+    raise Exception("numpy library is not installed.")
+# import wx
+try:
+    import wx
+except:
+    raise Exception("wx library is not installed")
+# import matplotlib
+try:
+    import matplotlib
+    import matplotlib.pyplot as plt
+    #matplotlib.use('WXAgg')
+    from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as FigureCanvas
+    from matplotlib.backends.backend_wx import NavigationToolbar2Wx
+    from matplotlib.figure import Figure
+except:
+    raise Exception("matplotlib library is not installed")
+ 
+ 
+# GLOBAL VARIABLES
+DEFAULT_DIR = os.getcwd()
+  
+class Widget(wx.BoxSizer):
+    # general parameters
+    __parameters__ = {}
+    __parameters__["orient"] = wx.HORIZONTAL
+    __parameters__["spacer"] = 10
+    __parameters__["labelSiserKwargs"] = {"proportion":0, "flag":wx.ALL|wx.ALIGN_CENTER_VERTICAL, "border":2}
+    __parameters__["widgetSiserKwargs"] = {"proportion":1, "flag":wx.ALL|wx.EXPAND, "border":2}
+    
+    def __init__(self, parent, title, widget,
+                       help = None,
+                       orient = None,
+                       spacer = None,
+                       labelSiserKwargs = None,
+                       widgetSiserKwargs = None):
+        # get parent
+        self.__set_parent__(parent)
+        # get widget
+        self.__set_widget__(widget)
+        # get orient
+        orient = self.__get_orientation__(orient)
+        # get spacer
+        spacer = self.__get_spacer__(spacer)
+        # get label
+        title = str(title)
+        # set label and widget siser kwargs
+        labelSiserKwargs = self.__get_sizer_kwargs__(labelSiserKwargs, "labelSiserKwargs")
+        widgetSiserKwargs = self.__get_sizer_kwargs__(widgetSiserKwargs, "widgetSiserKwargs")
+        # initialize
+        wx.BoxSizer.__init__(self,orient)
+        # get help
+        if help is not None:
+            help = "%s"%help
+        else:
+            help = ""
+        # construct widget
+        if len(title):
+            self.__title = wx.StaticText(parent=self.__parent, id=-1, label=title, style=wx.ALIGN_LEFT)
+            self.__title.SetToolTip( wx.ToolTip("%s"%(help)) )
+            self.Add( self.__title, **labelSiserKwargs)
+            self.AddSpacer(spacer)
+        else:
+            self.__title = None
+            self.__widget.SetToolTip( wx.ToolTip("%s"%(help)) )
+        self.Add( self.__widget, **widgetSiserKwargs)
+
+    @property
+    def parent(self):
+        return self.__parent
+        
+    @property
+    def widget(self):
+        return self.__widget
+    
+    @property
+    def title(self):
+        return self.__title
+        
+    def __set_parent__(self, parent):
+        assert isinstance(parent, wx.Window), "parent is normally the panel of the created wx.Window"
+        self.__parent = parent
+        
+    def __set_widget__(self, widget):
+        assert isinstance(widget, (wx.Window,wx.Sizer) ),"widget must be a wx.Window or wx.Sizer for multiple widgets"
+        self.__widget = widget
+                
+    def __get_orientation__(self, orient):
+        if orient is None:
+            return self.__parameters__["orient"]
+        else:
+            assert orient in (wx.HORIZONTAL, wx.VERTICAL), "orient must be either wx.HORIZONTAL or wx.VERTICAL"
+            return orient
+                 
+    def __get_spacer__(self, spacer):
+        if spacer is None:
+            return self.__parameters__["spacer"]
+        else:
+            assert isinstance(spacer, int) ,"spacer must be a positif integer"
+            assert spacer >= 0  ,"spacer must be a positif integer"
+            return spacer     
+       
+    def __get_sizer_kwargs__(self, kwargs, key):
+        if kwargs is None:
+            return self.__parameters__[key] 
+        else:
+            assert isinstance(kwargs,dict), "kwargs must be a python dictionary"
+            kwargsKeys = kwargs.keys()
+            keys = self.__parameters__[key].keys()
+            falseKeys = [k for k in kwargsKeys if k not in keys]
+            assert not falseKeys, "kwargs keys %s unknown" %falseKeys
+            return kwargs
+        
+
+class FloatSlider(wx.Slider):
+    def __init__(self, parent, id=-1, value=0, minval=-1, maxval=1, res=1e-2,
+                 size=wx.DefaultSize, style=wx.SL_HORIZONTAL,
+                 name='floatslider'):
+        self._value = value
+        self._min = minval
+        self._max = maxval
+        self._res = res
+        ival, imin, imax = [round(v/res) for v in (value, minval, maxval)]
+        self._islider = super(FloatSlider, self)
+        self._islider.__init__(parent, id, ival, imin, imax, size=size, style=style, name=name)
+        self.Bind(wx.EVT_SCROLL, self._OnScroll)
+
+    def _OnScroll(self, event):
+        ival = self._islider.GetValue()
+        imin = self._islider.GetMin()
+        imax = self._islider.GetMax()
+        if ival == imin:
+            self._value = self._min
+        elif ival == imax:
+            self._value = self._max
+        else:
+            self._value = ival * self._res
+        event.Skip()
+        #print 'OnScroll: value=%f, ival=%d' % (self._value, ival)
+
+    def GetValue(self):
+        return self._value
+
+    def GetMin(self):
+        return self._min
+
+    def GetMax(self):
+        return self._max
+
+    def GetRes(self):
+        return self._res
+
+    def SetValue(self, value):
+        self._islider.SetValue(round(value/self._res))
+        self._value = value
+
+    def SetMin(self, minval):
+        self._islider.SetMin(round(minval/self._res))
+        self._min = minval
+
+    def SetMax(self, maxval):
+        self._islider.SetMax(round(maxval/self._res))
+        self._max = maxval
+
+    def SetRes(self, res):
+        self._islider.SetRange(round(self._min/res), round(self._max/res))
+        self._islider.SetValue(round(self._value/res))
+        self._res = res
+
+    def SetRange(self, minval, maxval):
+        self._islider.SetRange(round(minval/self._res), round(maxval/self._res))
+        self._min = minval
+        self._max = maxval
+
+        
+class PlotFigure(wx.Frame):
+    def __init__(self, parent=None, title="plot", plotTitle='', mapOptions=False):
+        wx.Frame.__init__(self, parent=parent, title=title)
+        self.__panel = wx.Panel(self)
+        self.__sizer = wx.BoxSizer(wx.VERTICAL)
+        # slider settings
+        self.__sliderMax = 1000
+        # initialize data
+        self.__data   = None
+        self.__image  = None
+        self.__vector = None
+        # create figure, axes and canvas
+        self.__figure = Figure()
+        self.__axes = self.__figure.add_subplot(111)
+        self.__axes.set_title(str(plotTitle))
+        self.__canvas = FigureCanvas(self, -1, self.__figure)
+        # add figure to sizer
+        self.__sizer.Add(self.__canvas, 1, wx.EXPAND)
+        # add map options
+        if mapOptions:
+            self.create_map_panel()
+        # set sizer 
+        self.SetSizer(self.__sizer)
+        self.Fit()
+    
+    def plot_vector(self, data):
+        self.__vector = self.__axes.plot(data)
+        
+    def plot_image(self, data, extent=(0,100,0,100), axis='off', colormap="jet"):
+        # normalize data
+        self.__data = data
+        self.__dMin = float(np.nanmin(self.__data))
+        self.__dMax = float(np.nanmax(self.__data))
+        # plot image
+        self.__image = self.__axes.imshow( (self.__data-self.__dMin)/(self.__dMax-self.__dMin) )
+        self.__image.set_extent(extent)
+        self.__axes.axis(axis)
+        # set colormap
+        self.set_cmap(colormap)
+        # set limits
+        self.__xLowerWid.ChangeValue("0")
+        self.__xHigherWid.ChangeValue(str(self.__data.shape[0]))
+        self.__yLowerWid.ChangeValue("0")
+        self.__yHigherWid.ChangeValue(str(self.__data.shape[1]))
+        self.__limits = [0,self.__data.shape[0],0,self.__data.shape[1]]
+        
+    def set_cmap(self, colormap):
+        idx = self.__cmps.FindString(colormap)
+        if idx == -1:
+            idx = 0
+        self.__cmps.SetSelection(idx)   
+        self.set_colormap(colormap)
+        
+    def set_colormap(self, colormap):
+        if self.__image is None: return
+        self.__image.set_cmap(colormap)
+        self.__canvas.draw()
+        
+    def create_map_panel(self):
+        vSizer = wx.BoxSizer(wx.VERTICAL)
+        # set plotting range
+        limitSizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.__xLowerWid = wx.TextCtrl(self, value="")
+        self.__xHigherWid = wx.TextCtrl(self, value="")
+        self.__yLowerWid = wx.TextCtrl(self, value="")
+        self.__yHigherWid = wx.TextCtrl(self, value="")
+        limitSizer.Add(self.__xLowerWid, proportion=1, flag=wx.ALL|wx.EXPAND, border=2) 
+        limitSizer.Add(self.__xHigherWid, proportion=1, flag=wx.ALL|wx.EXPAND, border=2) 
+        limitSizer.Add(self.__yLowerWid, proportion=1, flag=wx.ALL|wx.EXPAND, border=2) 
+        limitSizer.Add(self.__yHigherWid, proportion=1, flag=wx.ALL|wx.EXPAND, border=2)
+        wid = Widget(parent=self, title="Data range", widget=limitSizer, help = "Set data range to plot as [xmin, xmax, ymin, ymax]")
+        vSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)         
+        # add colormap
+        maps = sorted(m for m in plt.cm.datad if not m.endswith("_r"))
+        self.__cmps = wx.Choice(self, id=-1, choices=maps)
+        wid = Widget(parent=self, title="Colormap", widget=self.__cmps, help = "Set the image colormap")
+        vSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2) 
+        # min value
+        self.__minValueSlider = wx.Slider(self, id=-1, value=0, minValue=0, maxValue=self.__sliderMax ,style=wx.SL_HORIZONTAL)
+        wid = Widget(parent=self, title="Minimum value", widget=self.__minValueSlider, help = "Set the minimum clipping value of data.")
+        vSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        # max value
+        self.__maxValueSlider =  wx.Slider(self, id=-1, value=self.__sliderMax, minValue=0, maxValue=self.__sliderMax ,style=wx.SL_HORIZONTAL)
+        wid = Widget(parent=self, title="Maximum value", widget=self.__maxValueSlider, help = "Set the maximum clipping value of data.")
+        vSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        # events
+        self.Bind(wx.EVT_SCROLL, self.on_min_value_slider, self.__minValueSlider)
+        self.Bind(wx.EVT_SCROLL, self.on_max_value_slider, self.__maxValueSlider)
+        self.Bind(wx.EVT_CHOICE, self.on_colormap, self.__cmps)
+        self.Bind(wx.EVT_TEXT, self.on_image_plot_limits, self.__xLowerWid)
+        self.Bind(wx.EVT_TEXT, self.on_image_plot_limits, self.__xHigherWid)
+        self.Bind(wx.EVT_TEXT, self.on_image_plot_limits, self.__yLowerWid)
+        self.Bind(wx.EVT_TEXT, self.on_image_plot_limits, self.__yHigherWid)
+        # add to sizer
+        self.__sizer.Add(vSizer, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+    
+    def on_colormap(self, event):
+        cmap = self.__cmps.GetString(self.__cmps.GetSelection())
+        self.set_colormap( cmap )
+        
+    def on_min_value_slider(self, event):
+        # get data
+        data = self.__data[self.__limits[0]:self.__limits[1],self.__limits[2]:self.__limits[3]]
+        # bring data to positive values
+        dmin = np.nanmin(data)
+        dmax = np.nanmax(data)-dmin
+        data -= dmin
+        # get min and max
+        minValue = self.__minValueSlider.GetValue()
+        maxValue = self.__maxValueSlider.GetValue()
+        if minValue>=maxValue:
+            self.__minValueSlider.SetValue(maxValue-1)
+            minValue = maxValue-1 
+        minValue = dmax*float(minValue)/float(self.__sliderMax)
+        maxValue = dmax*float(maxValue)/float(self.__sliderMax)
+        # clip values
+        data =  np.clip(data, minValue, maxValue)  
+        # get min and max
+        dmin = np.nanmin(data)
+        dmax = np.nanmax(data)
+        # plot
+        self.__axes.images[0].set_data( (data-dmin)/(dmax-dmin) )
+        self.__canvas.draw()
+        
+    def on_max_value_slider(self, event):
+        # get data
+        data = self.__data[self.__limits[0]:self.__limits[1],self.__limits[2]:self.__limits[3]]
+        # bring data to positive values
+        dmin = np.nanmin(data)
+        dmax = np.nanmax(data)-dmin
+        data -= dmin
+        # get min and max
+        minValue = self.__minValueSlider.GetValue()
+        maxValue = self.__maxValueSlider.GetValue()
+        if minValue>=maxValue:
+            self.__maxValueSlider.SetValue(minValue+1)
+            maxValue = minValue+1 
+        minValue = dmax*float(minValue)/float(self.__sliderMax)
+        maxValue = dmax*float(maxValue)/float(self.__sliderMax)
+        # clip values
+        data =  np.clip(data, minValue, maxValue)  
+        # get min and max
+        dmin = np.nanmin(data)
+        dmax = np.nanmax(data)
+        # plot
+        self.__axes.images[0].set_data( (data-dmin)/(dmax-dmin) )
+        self.__canvas.draw()
+        
+    def on_image_plot_limits(self, event):
+        # get xMin
+        val = self.__xLowerWid.GetValue()
+        try:
+            val = int(val) 
+        except:
+            val = None            
+        if val<0:
+            val = 0
+        if val is None:
+            self.__xLowerWid.ChangeValue(str(self.__limits[0]))   
+        else:            
+            self.__limits[0] = val
+        # get xMax
+        val = self.__xHigherWid.GetValue()
+        try:
+            val = int(val) 
+        except:
+            val = None            
+        if val<0:
+            val = 0
+        if val<=self.__limits[0]:
+            val = self.__limits[0]+1 
+            self.__xHigherWid.ChangeValue(str(val))   
+        if val > self.__data.shape[0]:
+            val = self.__data.shape[0]
+            self.__xHigherWid.ChangeValue(str(val)) 
+        if val is None:
+            self.__xHigherWid.ChangeValue(str(self.__limits[1]))   
+        else:            
+            self.__limits[1] = val
+        # get yMin
+        val = self.__yLowerWid.GetValue()
+        try:
+            val = int(val) 
+        except:
+            val = None            
+        if val<0:
+            val = 0
+        if val is None:
+            self.__yLowerWid.ChangeValue(str(self.__limits[2]))   
+        else:            
+            self.__limits[2] = val
+        # get yMax
+        val = self.__yHigherWid.GetValue()
+        try:
+            val = int(val) 
+        except:
+            val = None            
+        if val<0:
+            val = 0
+        if val<=self.__limits[2]:
+            val = self.__limits[2]+1
+            self.__yHigherWid.ChangeValue(str(val)) 
+        if val > self.__data.shape[1]:
+            val = self.__data.shape[1]
+            self.__yHigherWid.ChangeValue(str(val)) 
+        if val is None:
+            self.__yHigherWid.ChangeValue(str(self.__limits[3]))   
+        else:            
+            self.__limits[3] = val  
+              
+        # re-plot data
+        self.on_max_value_slider(None)
+      
+        
+class MainFrame(wx.Frame):
+    def __init__(self, parent, id, title):
+        wx.Frame.__init__(self, parent, id, title, wx.DefaultPosition, wx.Size(900, 500))
+        # initialize variables
+        self.__files        = []
+        self.__data         = []
+        self.__correlation  = None
+        self.__scedasticity = None
+        # analysis variable
+        self.__filesInterval          = 1
+        self.__scedasticityWindowSize = 25
+        # initialize read parameters
+        self.__comment     = "#"
+        self.__delimiter   = " "
+        self.__headerLines = 0
+        self.__footerLines = 0
+        self.__useColumn   = 0
+        # create main panel
+        self.__panel = wx.Panel(self, -1, style=wx.SIMPLE_BORDER)
+        # create main sizer
+        self.__mainSizer   = wx.BoxSizer(wx.VERTICAL)
+        self.__sizerLevel1 = wx.BoxSizer(wx.HORIZONTAL)
+        # create menubar
+        self.create_menu_bar()
+        # create files list control
+        self.create_files_list_control(sizer=self.__sizerLevel1)
+        # create variables widgets
+        self.create_variables_widgets(sizer=self.__sizerLevel1)
+        # add sizers
+        self.__mainSizer.Add(self.__sizerLevel1, proportion=1, flag=wx.ALL|wx.EXPAND, border=2)
+        # create loading variables
+        self.create_action_buttons(sizer=self.__mainSizer)
+        # create progress bar
+        self.__progressBar = wx.Gauge(self.__panel, range=100)
+        self.__mainSizer.Add(self.__progressBar, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        # set sizer
+        self.__panel.SetSizerAndFit(self.__mainSizer) 
+         
+    def create_action_buttons(self, sizer):    
+        # create bozSizer
+        sb = wx.StaticBox(self.__panel, label="Available actions")
+        horizontalSizer = wx.StaticBoxSizer(sb, wx.HORIZONTAL)
+        # create actions
+        plotData = wx.Button(self.__panel, -1, label="Plot data")
+        self.Bind(wx.EVT_BUTTON, self.on_plot_data, plotData)
+        correlation = wx.Button(self.__panel, -1, label="Correlation")
+        self.Bind(wx.EVT_BUTTON, self.on_compute_correlation, correlation)
+        scedasticity = wx.Button(self.__panel, -1, label="Scedasticity")
+        self.Bind(wx.EVT_BUTTON, self.on_compute_scedasticity, scedasticity)
+        horizontalSizer.Add(plotData, proportion=0, flag=wx.ALL, border=2)
+        horizontalSizer.Add(correlation, proportion=0, flag=wx.ALL, border=2)
+        horizontalSizer.Add(scedasticity, proportion=0, flag=wx.ALL, border=2)
+        # add to sizer
+        sizer.Add(horizontalSizer, proportion=0, flag=wx.ALL|wx.ALIGN_RIGHT, border=2)
+        
+    def create_files_list_control(self, sizer):
+        # create bozSizer
+        sb = wx.StaticBox(self.__panel, label="Files are read from top to bottom")
+        verticalSizer = wx.StaticBoxSizer(sb, wx.VERTICAL)
+        horizontalSizer = wx.BoxSizer(wx.HORIZONTAL)
+        # create list control
+        self.__filesWid = wx.ListBox(self.__panel, -1, style=wx.LB_ALWAYS_SB|wx.LB_HSCROLL|wx.LB_EXTENDED)
+        verticalSizer.Add(self.__filesWid, proportion=1, flag=wx.ALL|wx.EXPAND, border=2)
+        self.Bind(wx.EVT_LISTBOX, self.on_files_selection, self.__filesWid)
+        # create actions
+        self.__moveUp = wx.Button(self.__panel, -1, label="Move up")
+        self.Bind(wx.EVT_BUTTON, self.on_move_up, self.__moveUp)
+        self.__moveDown = wx.Button(self.__panel, -1, label="Move down")
+        self.Bind(wx.EVT_BUTTON, self.on_move_down, self.__moveDown)
+        self.__invertFilesList = wx.Button(self.__panel, -1, label="Invert")
+        self.Bind(wx.EVT_BUTTON, self.on_invert_order, self.__invertFilesList)
+        self.__discardFile = wx.Button(self.__panel, -1, label="Discard")
+        self.Bind(wx.EVT_BUTTON, self.on_discard_down, self.__discardFile)
+        #horizontalSizer.AddSpacer(10)
+        self.__LoadData = wx.Button(self.__panel, -1, label="Load")
+        self.Bind(wx.EVT_BUTTON, self.on_load_data, self.__LoadData)
+        # add to horizontalSizer
+        horizontalSizer.Add(self.__moveUp, proportion=1, flag=wx.ALL, border=2)
+        horizontalSizer.Add(self.__moveDown, proportion=1, flag=wx.ALL, border=2)
+        horizontalSizer.Add(self.__invertFilesList, proportion=1, flag=wx.ALL, border=2)
+        horizontalSizer.Add(self.__discardFile, proportion=1, flag=wx.ALL, border=2)
+        horizontalSizer.Add(self.__LoadData, proportion=1, flag=wx.ALL, border=2)
+        # add horizontalSizer
+        verticalSizer.Add(horizontalSizer, proportion=0, flag=wx.ALL|wx.ALIGN_RIGHT, border=2)
+        # add to sizer
+        sizer.Add(verticalSizer, proportion=1, flag=wx.ALL|wx.EXPAND, border=2)
+        # dis-activate all buttons
+        self.__moveUp.Enable(False)
+        self.__moveDown.Enable(False)
+        self.__invertFilesList.Enable(False)
+        self.__discardFile.Enable(False)
+        self.__LoadData.Enable(False)
+        # set help
+        self.__moveUp.SetToolTip( wx.ToolTip("Move UP selected files in the list.") )
+        self.__moveDown.SetToolTip( wx.ToolTip("Move DOWN selected files in the list.") )
+        self.__invertFilesList.SetToolTip( wx.ToolTip("Invert up side down all files order in the list regardless of selection.") )
+        self.__discardFile.SetToolTip( wx.ToolTip("Remove file from list.") )
+        self.__LoadData.SetToolTip( wx.ToolTip("Load all files in list regardless of selection.") )
+        
+    def create_variables_widgets(self, sizer):
+        # create main size
+        mainSizer = wx.BoxSizer(wx.VERTICAL)
+        # create bozSizer
+        sb = wx.StaticBox(self.__panel, label="Read files parameters")
+        loadBoxSizer = wx.StaticBoxSizer(sb, wx.VERTICAL)
+        # create comment
+        self.__commentWid = wx.TextCtrl(self.__panel, value=self.__comment)
+        wid = Widget(parent=self.__panel, title="Comment", widget=self.__commentWid, help = "The character used to indicate the start of a comment.")
+        loadBoxSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        self.Bind(wx.EVT_TEXT, self.on_comment, self.__commentWid)
+        # create delimiter
+        self.__delimiterWid = wx.TextCtrl(self.__panel, value=self.__delimiter)
+        wid = Widget(parent=self.__panel, title="Delimiter", widget=self.__delimiterWid, help = "The string used to separate values. By default, no delimiter is given which means any consecutive whitespaces act as delimiter.")
+        loadBoxSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        self.Bind(wx.EVT_TEXT, self.on_delimiter, self.__delimiterWid)
+        # create header lines
+        self.__headerLinesWid = wx.TextCtrl(self.__panel, value=str(self.__headerLines))
+        wid = Widget(parent=self.__panel, title="Header", widget=self.__headerLinesWid, help = "Skip the first lines consider as header.")
+        loadBoxSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        self.Bind(wx.EVT_TEXT, self.on_header_lines, self.__headerLinesWid)
+        # create footer lines
+        self.__footerLinesWid = wx.TextCtrl(self.__panel, value=str(self.__footerLines))
+        wid = Widget(parent=self.__panel, title="Footer", widget=self.__footerLinesWid, help = "Skip the last lines consider as footer.")
+        loadBoxSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        self.Bind(wx.EVT_TEXT, self.on_footer_lines, self.__footerLinesWid)
+        # create use column
+        self.__useColumnWid = wx.TextCtrl(self.__panel, value=str(self.__useColumn))
+        wid = Widget(parent=self.__panel, title="Data column", widget=self.__useColumnWid, help = "Select the data column to use.")
+        loadBoxSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        self.Bind(wx.EVT_TEXT, self.on_use_column, self.__useColumnWid)
+        # create bozSizer
+        sb = wx.StaticBox(self.__panel, label="Analysis parameters")
+        analysisBoxSizer = wx.StaticBoxSizer(sb, wx.VERTICAL)
+        # create filesIntervalWid
+        self.__filesIntervalWid = wx.TextCtrl(self.__panel, value=str(self.__filesInterval ) )
+        wid = Widget(parent=self.__panel, title="Interval", widget=self.__filesIntervalWid, 
+                     help = "Set the computation files interval. It must be a positive non-zero integer.\
+The computation will be performed  between every 'interval' files. For instance, when interval is '1',\
+correlation and scedasticity will be computed between successive files,\
+When interval is '2' correlation and scedasticity will be computed between every other file, etc.")
+        analysisBoxSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        self.Bind(wx.EVT_TEXT, self.on_files_interval, self.__filesIntervalWid)
+        # create scedasticityWindowSize
+        self.__scedasticityWindowSizeWid = wx.TextCtrl(self.__panel, value=str(self.__scedasticityWindowSize) )
+        wid = Widget(parent=self.__panel, title="Size", widget=self.__scedasticityWindowSizeWid, help = "Set the window size or interval to compute scedasticity. It must be an odd positive integer")
+        analysisBoxSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        self.Bind(wx.EVT_TEXT, self.on_scedasticity_window_size, self.__scedasticityWindowSizeWid)
+        # add to sizer
+        mainSizer.Add(loadBoxSizer, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        mainSizer.Add(analysisBoxSizer, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        sizer.Add(mainSizer, proportion=0, flag=wx.ALL, border=2)
+        # set initial read files parameters as chi
+        self.on_chi_file_parameter(None)
+        
+    def create_menu_bar(self):
+        # create menus
+        self.__menubar = wx.MenuBar()
+        file = wx.Menu()
+        help = wx.Menu()
+        browse = file.Append(-1, '&Browse', 'Browse data files')
+        file.AppendSeparator()
+        filesParameters = wx.Menu()
+        file.AppendMenu(-1, '&Files parameters', filesParameters)
+        chiParams = filesParameters.Append(-1, '&chi', 'chi files parameters')
+        grParams  = filesParameters.Append(-1, '&gr', 'gr files parameters')
+        sqParams  = filesParameters.Append(-1, '&sq', 'sq files parameters')
+        file.AppendSeparator()
+        quit = wx.MenuItem(file, -1, '&Quit\tCtrl+Q', 'Quit the Application')
+        file.AppendItem(quit)
+        self.__menubar.Append(file, '&File')
+        self.__menubar.Append(help, '&Help')
+        self.SetMenuBar(self.__menubar)
+        self.CreateStatusBar()
+        # bind menus
+        self.Bind(wx.EVT_MENU, self.on_browse, browse)
+        self.Bind(wx.EVT_MENU, self.on_quit, quit) 
+        self.Bind(wx.EVT_MENU, self.on_chi_file_parameter, chiParams)      
+        self.Bind(wx.EVT_MENU, self.on_gr_file_parameter, grParams)   
+        self.Bind(wx.EVT_MENU, self.on_sq_file_parameter, sqParams)           
+        
+    def on_browse(self, event):
+        wildcard = "Chi files (*.chi)|*.chi|"+\
+                   "Text files (*.txt)|*.txt|"+\
+                   "Data files (*.dat)|*.dat|"+\
+                   "All files (*.*)|*.*"
+        dialog = wx.FileDialog(None, message="Browse files", defaultDir=DEFAULT_DIR, defaultFile="",  wildcard=wildcard, style=wx.OPEN|wx.FD_MULTIPLE)
+        if dialog.ShowModal() == wx.ID_OK:
+            files = [os.path.normpath(str(p)) for p in dialog.GetPaths()]
+        else:
+            return
+        dialog.Destroy()
+        # update widget
+        self.populate_files(files)
+    
+    def populate_files(self, files):
+        # check files
+        self.__files    = [f for f in files if os.path.isfile(f) and os.access(f, os.R_OK)]
+        # update widget
+        self.__filesWid.Clear()
+        # update files
+        [self.__filesWid.Insert(self.__files[idx], idx) for idx in range(len(self.__files))]
+        # enable buttons
+        self.__LoadData.Enable(len(self.__files))
+        self.__invertFilesList.Enable(len(self.__files))
+        self.__invertFilesList.Enable(len(self.__files))
+        
+    def on_files_selection(self, event):
+        # get selection
+        selected = sorted( self.__filesWid.GetSelections() )
+        # enable buttons
+        self.__discardFile.Enable(len(selected))
+        if not len(selected):
+            self.__moveUp.Enable(False)
+            self.__moveDown.Enable(False)
+        else:
+            self.__moveUp.Enable(selected[0]>0)
+            self.__moveDown.Enable(selected[-1]<len(self.__files)-1)
+                
+    def on_quit(self, event):
+        exit()
+        
+    def on_comment(self, event):
+        self.__comment = str(event.GetEventObject().GetValue())
+
+    def on_delimiter(self, event):
+        self.__delimiter = str(event.GetEventObject().GetValue())
+        
+    def on_header_lines(self,event):
+        try:
+            val = event.GetEventObject().GetValue()
+            val = int(val) 
+        except:
+            val = None            
+        if val<0:
+            val = None
+        if val is None:
+            event.GetEventObject().ChangeValue(str(self.__headerLines))   
+        else:            
+            self.__headerLines = val
+    
+    def on_footer_lines(self, event):
+        try:
+            val = event.GetEventObject().GetValue()
+            val = int(val) 
+        except:
+            val = None            
+        if val<0:
+            val = None
+        if val is None:
+            event.GetEventObject().ChangeValue(str(self.__footerLines))   
+        else:            
+            self.__footerLines = val
+            
+    def on_use_column(self,event):
+        try:
+            val = event.GetEventObject().GetValue()
+            val = int(val)  
+        except:
+            val = None           
+        if val<0:
+            val = None
+        if val is None:
+            event.GetEventObject().ChangeValue(str(self.__useColumn))      
+        else:            
+            self.__useColumn = val
+    
+    def on_scedasticity_window_size(self, event):
+        try:
+            val = event.GetEventObject().GetValue()
+            val = int(val)  
+        except:
+            val = None           
+        if val<=0:
+            val = None
+        if val is None:
+            event.GetEventObject().ChangeValue(str(self.__scedasticityWindowSize))      
+        elif val % 2 == 0:
+            val -= 1
+            event.GetEventObject().ChangeValue(str(val))      
+        else:            
+            self.__scedasticityWindowSize = val
+
+    def on_files_interval(self, event):
+        try:
+            val = event.GetEventObject().GetValue()
+            val = int(val)  
+        except:
+            val = None           
+        if val<=0:
+            val = None
+        if val is None:
+            event.GetEventObject().ChangeValue(str(self.__filesInterval))      
+        else:
+            self.__filesInterval = val
+            # reset calculations
+            self.__correlation   = None
+            self.__scedasticity  = None
+            
+    def on_move_down(self, event):
+        selected = self.__filesWid.GetSelections()
+        if not len(selected):
+            return
+        if selected[0] == 0:
+            self.__moveUp.Enable(False)
+        else:
+            self.__moveUp.Enable(True)
+        if selected[-1] == len(self.__files)-1:
+            self.__moveDown.Enable(False)
+            return
+        # move selected
+        newSelection = []
+        for idx in reversed(selected):
+            filePath = self.__files.pop(idx)
+            self.__filesWid.Delete(idx)
+            self.__files.insert(idx+1, filePath)
+            self.__filesWid.Insert(filePath, idx+1)
+            self.__filesWid.SetSelection(idx+1, True)
+            newSelection.append(idx+1)
+        # set enables
+        self.__moveDown.Enable(not  newSelection[-1] == len(self.__files)-1)
+        self.__moveUp.Enable(not newSelection[0] == 0)
+  
+    def on_move_up(self, event):
+        selected = self.__filesWid.GetSelections()   
+        if not len(selected):
+            return
+        if selected[-1] == len(self.__files)-1:
+            self.__moveDown.Enable(False)
+        else:
+            self.__moveDown.Enable(True)
+        if selected[0] == 0:
+            self.__moveUp.Enable(False)
+            return
+        # move selected
+        newSelection = []
+        for idx in selected:
+            filePath = self.__files.pop(idx)
+            self.__filesWid.Delete(idx)
+            self.__files.insert(idx-1, filePath)
+            self.__filesWid.Insert(filePath, idx-1)
+            self.__filesWid.SetSelection(idx-1, True)
+            newSelection.append(idx-1)
+        # set enables
+        self.__moveDown.Enable(not  newSelection[-1] == len(self.__files)-1)
+        self.__moveUp.Enable(not newSelection[0] == 0)
+            
+    def on_invert_order(self, event):
+        # get selected files to select back
+        selected = sorted(self.__filesWid.GetSelections())
+        # clear all files
+        self.__filesWid.Clear()
+        self.__files = [item for item in reversed(self.__files)]
+        [self.__filesWid.Insert(self.__files[idx], idx) for idx in range(len(self.__files))]
+        # reselect files
+        [self.__filesWid.SetSelection(len(self.__files)-1-idx, True) for idx in selected]
+        
+    def on_discard_down(self, event):    
+        selected = sorted(self.__filesWid.GetSelections())
+        if not len(selected):
+            return
+        # correct indexes
+        selected = [selected[idx]-idx for idx in range(len(selected))]
+        for idx in selected:
+            self.__filesWid.SetSelection(idx, False)
+            self.__filesWid.Delete(idx)
+            self.__files.pop(idx)
+     
+    def on_load_data(self, event):
+        if not len(self.__files):
+            warnings.warn("must browse files first.")
+            return
+        data    = []
+        count   = 0
+        self.__progressBar.SetValue(0) 
+        self.__progressBar.SetRange(len(self.__files))
+        vectLen = None
+        for f in self.__files:
+            try:
+                d = np.genfromtxt(f, dtype    = np.float32,
+                                  comments    = self.__comment, 
+                                  delimiter   = self.__delimiter, 
+                                  skip_header = self.__headerLines,
+                                  skip_footer = self.__footerLines,
+                                  usecols     = self.__useColumn)
+            except Exception as e:
+                warnings.warn("file %s can't be read. %s"%(f,e))
+            else:
+                if vectLen is None:
+                    vectLen = len(d)
+                elif vectLen != len(d):
+                    warnings.warn("file %s length is found to be different than the rest of files"%(f))
+                data.append(d)
+            # update progress    
+            count += 1
+            self.__progressBar.SetValue(count)
+        # cast vectors length
+        self.__data = [d[:vectLen] for d in data]
+        # reset calculations
+        self.__correlation = None
+        self.__scedasticity = None
+        # reset progress bar
+        self.__progressBar.SetValue(len(self.__files))    
+            
+    def on_plot_data(self, event):
+        if not len(self.__data):
+            warnings.warn("must load data first.")
+            return
+        # vertical stack data
+        data = np.flipud( np.vstack(self.__data) )
+        # plot data
+        plot = PlotFigure(parent=self, title="raw data",
+                          plotTitle = "raw data",
+                          mapOptions=True)
+        plot.plot_image(data, extent=(0,100,0,100), axis='off')
+        plot.Show()
+    
+    def on_compute_correlation(self, event):
+        if not len(self.__data):
+            warnings.warn("must load data first.")
+            return
+        if len(self.__data) <= 1:
+            warnings.warn("At least two data set must be loaded")
+            return
+        if self.__correlation is None:
+            correlation = []
+            self.__progressBar.SetValue(0)  
+            self.__progressBar.SetRange(len(self.__data)-1)
+            for idx in range(0,len(self.__data)-1, self.__filesInterval):
+                y0 = self.__data[idx]
+                y1 = self.__data[idx+1]
+                # create correlation vector
+                y0mean = np.mean(y0)
+                y1mean = np.mean(y1)
+                y0_mean = y0-y0mean
+                y1_mean = y1-y1mean
+                numerator = np.sum(y0_mean*y1_mean)
+                denominator = np.sqrt(np.sum(y0_mean**2)*np.sum(y1_mean**2))
+                correlation.append( numerator/denominator )
+                # update bar
+                self.__progressBar.SetValue(idx+1)
+            self.__correlation = np.array(correlation)
+        # reset progress bar
+        self.__progressBar.SetValue(len(self.__data)-1)  
+        # plot data
+        plot = PlotFigure(parent=self, title="correlation", plotTitle="correlation interval %i"%self.__filesInterval)
+        plot.plot_vector(self.__correlation)
+        plot.Show()
+    
+    def __get_scedasticity_correlation(self, y0, y1, halfwindow):   
+        # create correlation vector
+        corr = np.nan*np.zeros(len(y0))
+        # create positions vector
+        positions = range(halfwindow, len(y0)-halfwindow, 1)
+        # calculate correlations
+        for idx in positions:
+            dotproduct = np.dot(y0[idx-halfwindow:idx+halfwindow+1], y1[idx-halfwindow:idx+halfwindow+1])
+            normy1 = norm(y0[idx-halfwindow:idx+halfwindow+1])
+            normy2 = norm(y1[idx-halfwindow:idx+halfwindow+1])
+            corr[idx] = dotproduct/(normy1*normy2)
+        return corr
+        
+    def on_compute_scedasticity(self, event):
+        if not len(self.__data):
+            warnings.warn("must load data first.")
+            return
+        windowSize=float(self.__scedasticityWindowSize)
+        assert windowSize<=len(self.__data[0]), "scedasticity size cannot be bigger than the data size"
+        halfwindow = int(windowSize/2)
+        if self.__scedasticity is None:
+            correlation = []
+            self.__progressBar.SetValue(0)  
+            self.__progressBar.SetRange(len(self.__data)-self.__filesInterval)
+            for idx in range(0, len(self.__data)-self.__filesInterval): 
+                y0 = self.__data[idx]
+                y1 = self.__data[idx+self.__filesInterval] 
+                correlation.append(self.__get_scedasticity_correlation(y0,y1, halfwindow))
+                # update bar
+                self.__progressBar.SetValue(idx+1)
+            # reset progress bar
+            self.__progressBar.SetValue(len(self.__data)-self.__filesInterval)  
+            self.__scedasticity = np.vstack(correlation)
+        # vertical stack data
+        data = np.flipud( self.__scedasticity )
+        # plot data
+        plot = PlotFigure(parent=self, title="scedasticity", 
+                          plotTitle="correlation interval %i"%self.__filesInterval,
+                          mapOptions=True)
+        plot.plot_image(data, extent=(0,100,0,100), axis='off', colormap="jet")
+        plot.Show()
+
+    def __update_read_files_parameters(self, comment, delimiter, headerLines, footerLines, useColumn):
+        # create comment
+        self.__commentWid.ChangeValue(str(comment))
+        self.__comment = comment
+        # create delimiter
+        self.__delimiterWid.ChangeValue(str(delimiter))
+        self.__delimiter = delimiter
+        # create header lines
+        self.__headerLinesWid.ChangeValue(str(headerLines))
+        self.__headerLines = headerLines
+        # create footer lines
+        self.__footerLinesWid.ChangeValue(str(footerLines))
+        self.__footerLines = footerLines
+        # create use column
+        self.__useColumnWid.ChangeValue(str(useColumn))
+        self.__useColumn = useColumn     
+        
+    def on_chi_file_parameter(self, event):
+        self.__update_read_files_parameters(comment="#", delimiter="", headerLines=4, footerLines=0, useColumn=1)
+        
+    def on_gr_file_parameter(self, event):
+        self.__update_read_files_parameters(comment="#", delimiter="", headerLines=135, footerLines=0, useColumn=1)   
+    
+    def on_sq_file_parameter(self, event):
+        self.__update_read_files_parameters(comment="#", delimiter="", headerLines=135, footerLines=0, useColumn=1)   
+        
+        
+        
+        
+        
+class MyApp(wx.App):
+    def OnInit(self):
+        frame = MainFrame(None, -1, 'Ranked set data analysis')
+        # populate files automatically
+        path = "C:\\Users\\aoun\\Documents\\collaboration\\zonghai\\diffraction_11IDC_10APR2014\\mixed"
+        files = [os.path.join(path,fn) for fn in next(os.walk(path))[2] if ".chi" in fn]
+        frame.populate_files([files[idx] for idx in range(0, len(files), 3)])
+        frame.on_chi_file_parameter(None)
+        frame.Show(True)
+        return True
+
+app = MyApp(0)
+app.MainLoop()  
+
+
+
