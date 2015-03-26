@@ -185,7 +185,7 @@ class FloatSlider(wx.Slider):
         
 class PlotFigure(wx.Dialog):
     def __init__(self, parent=None, title="plot", plotTitle='', mapOptions=False):
-        wx.Dialog.__init__(self, parent=parent, title=title)
+        wx.Dialog.__init__(self, parent=parent, title=title, style=wx.DEFAULT_DIALOG_STYLE|wx.RESIZE_BORDER|wx.MAXIMIZE_BOX|wx.MINIMIZE_BOX)
         self.__sizer = wx.BoxSizer(wx.VERTICAL)
         toolbarSizer = wx.BoxSizer(wx.HORIZONTAL)
         # slider settings
@@ -589,8 +589,8 @@ When interval is '2' correlation and scedasticity will be computed between every
         
     def on_browse(self, event):
         wildcard = "Chi files (*.chi)|*.chi|"+\
-                   "Text files (*.txt)|*.txt|"+\
-                   "Data files (*.dat)|*.dat|"+\
+                   "gr files (*.gr)|*.gr|"+\
+                   "sq files (*.sq)|*.sq|"+\
                    "All files (*.*)|*.*"
         dialog = wx.FileDialog(None, message="Browse files", defaultDir=DEFAULT_DIR, defaultFile="",  wildcard=wildcard, style=wx.OPEN|wx.FD_MULTIPLE)
         if dialog.ShowModal() == wx.ID_OK:
@@ -830,9 +830,17 @@ When interval is '2' correlation and scedasticity will be computed between every
     def on_compute_correlation(self, event):
         if not len(self.__data):
             warnings.warn("must load data first.")
+            dlg = wx.MessageDialog(self, "must load data first.",
+                  "No data found", wx.OK|wx.ICON_WARNING)
+            result = dlg.ShowModal()
+            dlg.Destroy()
             return
         if len(self.__data) <= 1:
             warnings.warn("At least two data set must be loaded")
+            dlg = wx.MessageDialog(self, "At least two data set must be loaded.",
+                  "Not enough data found", wx.OK|wx.ICON_WARNING)
+            result = dlg.ShowModal()
+            dlg.Destroy()
             return
         if self.__correlation is None:
             correlation = []
@@ -875,6 +883,10 @@ When interval is '2' correlation and scedasticity will be computed between every
     def on_compute_scedasticity(self, event):
         if not len(self.__data):
             warnings.warn("must load data first.")
+            dlg = wx.MessageDialog(self, "must load data first.",
+                  "No data found", wx.OK|wx.ICON_WARNING)
+            result = dlg.ShowModal()
+            dlg.Destroy()
             return
         windowSize=float(self.__scedasticityWindowSize)
         assert windowSize<=len(self.__data[0]), "scedasticity size cannot be bigger than the data size"
