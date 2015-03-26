@@ -376,7 +376,7 @@ class PlotFigure(wx.Dialog):
     
 class About(wx.Dialog):
     def __init__(self, title="About"):
-        wx.Dialog.__init__(self, None, -1, title=title, style=wx.DEFAULT_DIALOG_STYLE|wx.RESIZE_BORDER)
+        wx.Dialog.__init__(self, None, -1, title=title, size=(750,300), style=wx.DEFAULT_DIALOG_STYLE|wx.RESIZE_BORDER)
         self.CenterOnScreen(wx.BOTH)
 
         paper = "B. Aoun et al; Journal of Power Sources 279 (2015) 246-251"
@@ -945,7 +945,7 @@ When interval is '2' correlation and scedasticity will be computed between every
         
 class MyApp(wx.App):
     def OnInit(self):
-        frame = MainFrame(None, -1, 'Ranked data set analysis')
+        frame = MainFrame(None, -1, 'Ranked data analysis ( B. Aoun et al )')
         # populate files automatically
         #path = "C:\\Users\\aoun\\Documents\\collaboration\\zonghai\\diffraction_11IDC_10APR2014\\mixed"
         #files = [os.path.join(path,fn) for fn in next(os.walk(path))[2] if ".chi" in fn]
