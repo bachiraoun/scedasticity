@@ -1,5 +1,6 @@
 # python standard libraries imports
 import os
+import sys
 import warnings
 
 # import numpy
@@ -24,12 +25,43 @@ try:
 except:
     raise Exception("matplotlib library is not installed")
  
- 
+# import parameters
+try:
+    from parameters import parameters as PARAMETERS
+except:
+    raise Exception("scedasticity 'parameters.py' is missing")
 
 
-# GLOBAL VARIABLES
-DEFAULT_DIR = os.getcwd()
-  
+# set default dir
+DEFAULT_DIR = os.path.abspath(PARAMETERS["defaultdir"])
+DEFAULT_DIR = os.path.abspath(PARAMETERS["defaultdir"])
+DEFAULT_DIR = os.path.abspath(PARAMETERS["defaultdir"])
+
+if not os.path.isdir(DEFAULT_DIR) or not os.path.exists(DEFAULT_DIR):
+    DEFAULT_DIR = os.path.expanduser("~")
+
+def SET_GENERAL_PARAMETERS(**kwargs):
+    params = globals()["PARAMETERS"]
+    for k,v in kwargs.items():
+        if params.has_key(k):
+            params[k] = v
+    # open for writing
+    try:
+        fd = open("parameters.py", 'w')
+    except:
+        dlg = wx.MessageDialog(self, "Can't open 'parameters.py file, maybe access is not granted.",
+                               "Can't access file", wx.OK|wx.ICON_WARNING)
+        result = dlg.ShowModal()
+        dlg.Destroy()
+        return
+    fd.write("# python imports\n")
+    fd.write("import os\n\n")
+    fd.write("parameters = {}\n")
+    for k,v in params.items():
+        fd.write("parameters['%s'] = %s\n"%(str(k),str(v)))
+    fd.close()
+    
+    
 class Widget(wx.BoxSizer):
     # general parameters
     __parameters__ = {}
@@ -223,13 +255,16 @@ class PlotFigure(wx.Dialog):
         
         
     def on_export_data(self, event):
-        saveFileDialog = wx.FileDialog(parent=self, 
+        dialog = wx.FileDialog(parent=self, 
                                        message="Save Data", 
                                        defaultDir="", 
                                        defaultFile="", 
                                        style= wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT)
-        if saveFileDialog.ShowModal() == wx.ID_CANCEL:
-            return     # the user has cancelled
+        returned = dialog.ShowModal() 
+        globals()["DEFAULT_DIR"] = dialog.GetDirectory()
+        dialog.Destroy()        
+        if returned == wx.ID_CANCEL:
+            return 
         # get and format fname
         fname = saveFileDialog.GetPath()
         # export data
@@ -573,7 +608,11 @@ When interval is '2' correlation and scedasticity will be computed between every
         quit = wx.MenuItem(file, -1, '&Quit\tCtrl+Q', 'Quit the Application')
         file.AppendItem(quit)
         self.__menubar.Append(file, '&File')
-        #self.__menubar.Append(about, '&About')
+        # create parameters menu
+        params = wx.Menu()
+        defDir = params.Append(-1, 'Set default directory', 'Set default directory')
+        self.__menubar.Append(params, '&Parameters')
+        # set menubar
         self.SetMenuBar(self.__menubar)
         self.CreateStatusBar()
         # bind menus
@@ -582,8 +621,27 @@ When interval is '2' correlation and scedasticity will be computed between every
         self.Bind(wx.EVT_MENU, self.on_chi_file_parameter, chiParams)      
         self.Bind(wx.EVT_MENU, self.on_gr_file_parameter, grParams)   
         self.Bind(wx.EVT_MENU, self.on_sq_file_parameter, sqParams)  
-        self.Bind(wx.EVT_MENU, self.on_about, about)  
-        
+        self.Bind(wx.EVT_MENU, self.on_about, about) 
+        self.Bind(wx.EVT_MENU, self.on_default_dir, defDir)         
+    
+    def on_default_dir(self, event):
+        dialog = wx.DirDialog (None, 
+                               message = "Choose default directory",
+                               defaultPath=DEFAULT_DIR, 
+                               style=wx.DD_DEFAULT_STYLE | wx.DD_DIR_MUST_EXIST)
+        returned = dialog.ShowModal() 
+        if returned == wx.ID_OK:
+            p = os.path.abspath(dialog.GetPath())
+            # ensure double backslashes on windows
+            if sys.platform.startswith('win'):
+                p = p.replace("\\","\\"+"\\")
+            s = os.path.split(dialog.GetPath()) 
+            os.path.join(s[0], s[1])
+            globals()["DEFAULT_DIR"] = p
+            SET_GENERAL_PARAMETERS(defaultdir = '"'+p+'"')
+        else:
+            return
+            
     def on_about(self, event):
         About().ShowModal()
         
@@ -592,12 +650,18 @@ When interval is '2' correlation and scedasticity will be computed between every
                    "gr files (*.gr)|*.gr|"+\
                    "sq files (*.sq)|*.sq|"+\
                    "All files (*.*)|*.*"
-        dialog = wx.FileDialog(None, message="Browse files", defaultDir=DEFAULT_DIR, defaultFile="",  wildcard=wildcard, style=wx.OPEN|wx.FD_MULTIPLE)
-        if dialog.ShowModal() == wx.ID_OK:
+        dialog = wx.FileDialog(None, message="Browse files", 
+                                     defaultDir=DEFAULT_DIR, 
+                                     defaultFile="", 
+                                     wildcard=wildcard,
+                                     style=wx.OPEN|wx.FD_MULTIPLE)
+        returned = dialog.ShowModal() 
+        globals()["DEFAULT_DIR"] = dialog.GetDirectory()
+        dialog.Destroy()
+        if returned == wx.ID_OK:
             files = [os.path.normpath(str(p)) for p in dialog.GetPaths()]
         else:
             return
-        dialog.Destroy()
         # update widget
         self.populate_files(files)
     
@@ -777,6 +841,10 @@ When interval is '2' correlation and scedasticity will be computed between every
     def on_load_data(self, event):
         if not len(self.__files):
             warnings.warn("must browse files first.")
+            dlg = wx.MessageDialog(self, "must browse files first.",
+                  "No data found", wx.OK|wx.ICON_WARNING)
+            result = dlg.ShowModal()
+            dlg.Destroy()
             return
         data    = []
         count   = 0
