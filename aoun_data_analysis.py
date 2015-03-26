@@ -402,6 +402,8 @@ This approach is based on correlation functions and statistical scedasticity for
 class MainFrame(wx.Frame):
     def __init__(self, parent, id, title):
         wx.Frame.__init__(self, parent, id, title, wx.DefaultPosition, wx.Size(900, 500))
+        self.SetIcon(wx.Icon('scedasticity16X16.PNG',wx.BITMAP_TYPE_PNG, 16,16))
+        
         # initialize variables
         self.__files        = []
         self.__data         = []
@@ -933,10 +935,10 @@ class MyApp(wx.App):
     def OnInit(self):
         frame = MainFrame(None, -1, 'Ranked data set analysis')
         # populate files automatically
-        path = "C:\\Users\\aoun\\Documents\\collaboration\\zonghai\\diffraction_11IDC_10APR2014\\mixed"
-        files = [os.path.join(path,fn) for fn in next(os.walk(path))[2] if ".chi" in fn]
-        frame.populate_files([files[idx] for idx in range(0, len(files), 3)])
-        frame.on_chi_file_parameter(None)
+        #path = "C:\\Users\\aoun\\Documents\\collaboration\\zonghai\\diffraction_11IDC_10APR2014\\mixed"
+        #files = [os.path.join(path,fn) for fn in next(os.walk(path))[2] if ".chi" in fn]
+        #frame.populate_files([files[idx] for idx in range(0, len(files), 3)])
+        #frame.on_chi_file_parameter(None)
         frame.Show(True)
         return True
 
