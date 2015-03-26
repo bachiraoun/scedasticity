@@ -19,12 +19,14 @@ try:
     import matplotlib.pyplot as plt
     #matplotlib.use('WXAgg')
     from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as FigureCanvas
-    from matplotlib.backends.backend_wx import NavigationToolbar2Wx
+    from matplotlib.backends.backend_wx import NavigationToolbar2Wx, _load_bitmap
     from matplotlib.figure import Figure
 except:
     raise Exception("matplotlib library is not installed")
  
  
+
+
 # GLOBAL VARIABLES
 DEFAULT_DIR = os.getcwd()
   
@@ -181,11 +183,11 @@ class FloatSlider(wx.Slider):
         self._max = maxval
 
         
-class PlotFigure(wx.Frame):
+class PlotFigure(wx.Dialog):
     def __init__(self, parent=None, title="plot", plotTitle='', mapOptions=False):
-        wx.Frame.__init__(self, parent=parent, title=title)
-        self.__panel = wx.Panel(self)
+        wx.Dialog.__init__(self, parent=parent, title=title)
         self.__sizer = wx.BoxSizer(wx.VERTICAL)
+        toolbarSizer = wx.BoxSizer(wx.HORIZONTAL)
         # slider settings
         self.__sliderMax = 1000
         # initialize data
@@ -197,35 +199,92 @@ class PlotFigure(wx.Frame):
         self.__axes = self.__figure.add_subplot(111)
         self.__axes.set_title(str(plotTitle))
         self.__canvas = FigureCanvas(self, -1, self.__figure)
+        self.__toolbar = NavigationToolbar2Wx(self.__canvas)
+        self.__toolbar.DeleteToolByPos(0) 
+        # export data button
+        exportData = wx.Button(self, -1, label="Export data")
+        self.Bind(wx.EVT_BUTTON, self.on_export_data, exportData)
         # add figure to sizer
-        self.__sizer.Add(self.__canvas, 1, wx.EXPAND)
+        toolbarSizer
+        self.__sizer.Add(self.__canvas, proportion=1, flag=wx.ALL|wx.EXPAND, border=2)
+        toolbarSizer.Add(self.__toolbar, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        toolbarSizer.AddSpacer(20)
+        toolbarSizer.Add(exportData, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        self.__sizer.Add(toolbarSizer,  proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
         # add map options
         if mapOptions:
             self.create_map_panel()
         # set sizer 
         self.SetSizer(self.__sizer)
         self.Fit()
-    
-    def plot_vector(self, data):
-        self.__vector = self.__axes.plot(data)
+        # bind zooming
+        self.__canvas.mpl_connect("button_release_event", self.on_matplotlib_mouse_release)
         
-    def plot_image(self, data, extent=(0,100,0,100), axis='off', colormap="jet"):
+        
+        
+    def on_export_data(self, event):
+        saveFileDialog = wx.FileDialog(parent=self, 
+                                       message="Save Data", 
+                                       defaultDir="", 
+                                       defaultFile="", 
+                                       style= wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT)
+        if saveFileDialog.ShowModal() == wx.ID_CANCEL:
+            return     # the user has cancelled
+        # get and format fname
+        fname = saveFileDialog.GetPath()
+        # export data
+        np.savetxt(fname, self.__data, fmt='%.8e', delimiter='  ', 
+                   newline='\n', 
+                   header="B. Aoun et al; Journal of Power Sources 279 (2015) 246-251", 
+                   footer='', 
+                   comments='# ')
+        
+        
+    def on_matplotlib_mouse_release(self, event):
+        """ print zoom-mode after  'button_press_event'  """
+        #print self.__toolbar.mode
+        if self.__toolbar.mode == "zoom rect":
+            if self.__image is not None:
+                xlimits = [int(l) for l in self.__axes.get_xlim()]
+                ylimits = [int(l) for l in self.__axes.get_ylim()]
+                self.__limits = [ylimits[0],ylimits[1],xlimits[0],xlimits[1]]
+                # recompute slider values
+                self.on_max_value_slider(None)
+
+    def plot_vector(self, data,
+                          axis='on',
+                          xLabel="number or files", yLabel="correlation",
+                          ticksDirection="out"):
+        self.__data   = data
+        self.__vector = self.__axes.plot(data)
+        self.__axes.axis(axis)
+        self.__axes.set_xlabel(xLabel)
+        self.__axes.set_ylabel(yLabel)
+        self.__axes.get_yaxis().set_tick_params(direction=ticksDirection)
+        self.__axes.get_xaxis().set_tick_params(direction=ticksDirection)
+        
+    def plot_image(self, data, extent=(0,100,0,100), colormap="jet",
+                         axis='on', origin="lower",
+                         xLabel="number or points", yLabel="number of files",
+                         ticksDirection="out"):
         # normalize data
         self.__data = data
         self.__dMin = float(np.nanmin(self.__data))
         self.__dMax = float(np.nanmax(self.__data))
         # plot image
-        self.__image = self.__axes.imshow( (self.__data-self.__dMin)/(self.__dMax-self.__dMin) )
-        self.__image.set_extent(extent)
+        self.__image = self.__axes.imshow( (self.__data-self.__dMin)/(self.__dMax-self.__dMin), 
+                                            aspect="auto", origin=origin)
+        #self.__image.set_extent(extent)
         self.__axes.axis(axis)
+        self.__axes.set_xlabel(xLabel)
+        self.__axes.set_ylabel(yLabel)
+        self.__axes.get_yaxis().set_tick_params(direction=ticksDirection)
+        self.__axes.get_xaxis().set_tick_params(direction=ticksDirection)
         # set colormap
         self.set_cmap(colormap)
         # set limits
-        self.__xLowerWid.ChangeValue("0")
-        self.__xHigherWid.ChangeValue(str(self.__data.shape[0]))
-        self.__yLowerWid.ChangeValue("0")
-        self.__yHigherWid.ChangeValue(str(self.__data.shape[1]))
         self.__limits = [0,self.__data.shape[0],0,self.__data.shape[1]]
+        
         
     def set_cmap(self, colormap):
         idx = self.__cmps.FindString(colormap)
@@ -240,19 +299,7 @@ class PlotFigure(wx.Frame):
         self.__canvas.draw()
         
     def create_map_panel(self):
-        vSizer = wx.BoxSizer(wx.VERTICAL)
-        # set plotting range
-        limitSizer = wx.BoxSizer(wx.HORIZONTAL)
-        self.__xLowerWid = wx.TextCtrl(self, value="")
-        self.__xHigherWid = wx.TextCtrl(self, value="")
-        self.__yLowerWid = wx.TextCtrl(self, value="")
-        self.__yHigherWid = wx.TextCtrl(self, value="")
-        limitSizer.Add(self.__xLowerWid, proportion=1, flag=wx.ALL|wx.EXPAND, border=2) 
-        limitSizer.Add(self.__xHigherWid, proportion=1, flag=wx.ALL|wx.EXPAND, border=2) 
-        limitSizer.Add(self.__yLowerWid, proportion=1, flag=wx.ALL|wx.EXPAND, border=2) 
-        limitSizer.Add(self.__yHigherWid, proportion=1, flag=wx.ALL|wx.EXPAND, border=2)
-        wid = Widget(parent=self, title="Data range", widget=limitSizer, help = "Set data range to plot as [xmin, xmax, ymin, ymax]")
-        vSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)         
+        vSizer = wx.BoxSizer(wx.VERTICAL)   
         # add colormap
         maps = sorted(m for m in plt.cm.datad if not m.endswith("_r"))
         self.__cmps = wx.Choice(self, id=-1, choices=maps)
@@ -270,10 +317,6 @@ class PlotFigure(wx.Frame):
         self.Bind(wx.EVT_SCROLL, self.on_min_value_slider, self.__minValueSlider)
         self.Bind(wx.EVT_SCROLL, self.on_max_value_slider, self.__maxValueSlider)
         self.Bind(wx.EVT_CHOICE, self.on_colormap, self.__cmps)
-        self.Bind(wx.EVT_TEXT, self.on_image_plot_limits, self.__xLowerWid)
-        self.Bind(wx.EVT_TEXT, self.on_image_plot_limits, self.__xHigherWid)
-        self.Bind(wx.EVT_TEXT, self.on_image_plot_limits, self.__yLowerWid)
-        self.Bind(wx.EVT_TEXT, self.on_image_plot_limits, self.__yHigherWid)
         # add to sizer
         self.__sizer.Add(vSizer, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
     
@@ -283,7 +326,7 @@ class PlotFigure(wx.Frame):
         
     def on_min_value_slider(self, event):
         # get data
-        data = self.__data[self.__limits[0]:self.__limits[1],self.__limits[2]:self.__limits[3]]
+        data = np.copy(self.__data[self.__limits[0]:self.__limits[1], self.__limits[2]:self.__limits[3]])
         # bring data to positive values
         dmin = np.nanmin(data)
         dmax = np.nanmax(data)-dmin
@@ -307,7 +350,7 @@ class PlotFigure(wx.Frame):
         
     def on_max_value_slider(self, event):
         # get data
-        data = self.__data[self.__limits[0]:self.__limits[1],self.__limits[2]:self.__limits[3]]
+        data = np.copy(self.__data[self.__limits[0]:self.__limits[1], self.__limits[2]:self.__limits[3]])
         # bring data to positive values
         dmin = np.nanmin(data)
         dmax = np.nanmax(data)-dmin
@@ -329,71 +372,32 @@ class PlotFigure(wx.Frame):
         self.__axes.images[0].set_data( (data-dmin)/(dmax-dmin) )
         self.__canvas.draw()
         
-    def on_image_plot_limits(self, event):
-        # get xMin
-        val = self.__xLowerWid.GetValue()
-        try:
-            val = int(val) 
-        except:
-            val = None            
-        if val<0:
-            val = 0
-        if val is None:
-            self.__xLowerWid.ChangeValue(str(self.__limits[0]))   
-        else:            
-            self.__limits[0] = val
-        # get xMax
-        val = self.__xHigherWid.GetValue()
-        try:
-            val = int(val) 
-        except:
-            val = None            
-        if val<0:
-            val = 0
-        if val<=self.__limits[0]:
-            val = self.__limits[0]+1 
-            self.__xHigherWid.ChangeValue(str(val))   
-        if val > self.__data.shape[0]:
-            val = self.__data.shape[0]
-            self.__xHigherWid.ChangeValue(str(val)) 
-        if val is None:
-            self.__xHigherWid.ChangeValue(str(self.__limits[1]))   
-        else:            
-            self.__limits[1] = val
-        # get yMin
-        val = self.__yLowerWid.GetValue()
-        try:
-            val = int(val) 
-        except:
-            val = None            
-        if val<0:
-            val = 0
-        if val is None:
-            self.__yLowerWid.ChangeValue(str(self.__limits[2]))   
-        else:            
-            self.__limits[2] = val
-        # get yMax
-        val = self.__yHigherWid.GetValue()
-        try:
-            val = int(val) 
-        except:
-            val = None            
-        if val<0:
-            val = 0
-        if val<=self.__limits[2]:
-            val = self.__limits[2]+1
-            self.__yHigherWid.ChangeValue(str(val)) 
-        if val > self.__data.shape[1]:
-            val = self.__data.shape[1]
-            self.__yHigherWid.ChangeValue(str(val)) 
-        if val is None:
-            self.__yHigherWid.ChangeValue(str(self.__limits[3]))   
-        else:            
-            self.__limits[3] = val  
-              
-        # re-plot data
-        self.on_max_value_slider(None)
-      
+    
+    
+class About(wx.Dialog):
+    def __init__(self, title="About"):
+        wx.Dialog.__init__(self, None, -1, title=title, style=wx.DEFAULT_DIALOG_STYLE|wx.RESIZE_BORDER)
+        self.CenterOnScreen(wx.BOTH)
+
+        paper = "B. Aoun et al; Journal of Power Sources 279 (2015) 246-251"
+        paper = wx.StaticText(self, -1, paper, (30,15), style=wx.ALIGN_CENTRE)
+        paperfont = wx.Font(10, wx.MODERN, wx.ITALIC, wx.BOLD)
+        paper.SetFont(paperfont)
+        
+        description = "This software is about a generalized method used to extract \
+critical information from series of ranked correlated data. The method is generally \
+applicable to all types of spectra evolving as a function of any arbitrary parameter. \
+This approach is based on correlation functions and statistical scedasticity formalism."
+        description = wx.StaticText(self, -1, description,(30,15), style=wx.ALIGN_LEFT) 
+        descriptionFont = wx.Font(12, wx.MODERN, wx.NORMAL, wx.NORMAL)
+        description.SetFont(descriptionFont) 
+        
+        vbox = wx.BoxSizer(wx.VERTICAL)
+        vbox.Add(description, 1, wx.ALIGN_CENTER|wx.BOTTOM, 2)
+        vbox.Add(paper, 0, wx.ALIGN_CENTER|wx.TOP, 2)
+        self.SetSizer(vbox)
+        
+        
         
 class MainFrame(wx.Frame):
     def __init__(self, parent, id, title):
@@ -553,7 +557,7 @@ When interval is '2' correlation and scedasticity will be computed between every
         # create menus
         self.__menubar = wx.MenuBar()
         file = wx.Menu()
-        help = wx.Menu()
+        #about = wx.Menu()
         browse = file.Append(-1, '&Browse', 'Browse data files')
         file.AppendSeparator()
         filesParameters = wx.Menu()
@@ -562,10 +566,12 @@ When interval is '2' correlation and scedasticity will be computed between every
         grParams  = filesParameters.Append(-1, '&gr', 'gr files parameters')
         sqParams  = filesParameters.Append(-1, '&sq', 'sq files parameters')
         file.AppendSeparator()
+        about  = file.Append(-1, 'About', 'About')
+        file.AppendSeparator()
         quit = wx.MenuItem(file, -1, '&Quit\tCtrl+Q', 'Quit the Application')
         file.AppendItem(quit)
         self.__menubar.Append(file, '&File')
-        self.__menubar.Append(help, '&Help')
+        #self.__menubar.Append(about, '&About')
         self.SetMenuBar(self.__menubar)
         self.CreateStatusBar()
         # bind menus
@@ -573,7 +579,11 @@ When interval is '2' correlation and scedasticity will be computed between every
         self.Bind(wx.EVT_MENU, self.on_quit, quit) 
         self.Bind(wx.EVT_MENU, self.on_chi_file_parameter, chiParams)      
         self.Bind(wx.EVT_MENU, self.on_gr_file_parameter, grParams)   
-        self.Bind(wx.EVT_MENU, self.on_sq_file_parameter, sqParams)           
+        self.Bind(wx.EVT_MENU, self.on_sq_file_parameter, sqParams)  
+        self.Bind(wx.EVT_MENU, self.on_about, about)  
+        
+    def on_about(self, event):
+        About().ShowModal()
         
     def on_browse(self, event):
         wildcard = "Chi files (*.chi)|*.chi|"+\
@@ -801,14 +811,18 @@ When interval is '2' correlation and scedasticity will be computed between every
     def on_plot_data(self, event):
         if not len(self.__data):
             warnings.warn("must load data first.")
+            dlg = wx.MessageDialog(self, "must load data first.",
+                  "No data found", wx.OK|wx.ICON_WARNING)
+            result = dlg.ShowModal()
+            dlg.Destroy()
             return
         # vertical stack data
-        data = np.flipud( np.vstack(self.__data) )
+        data = np.vstack(self.__data)
         # plot data
         plot = PlotFigure(parent=self, title="raw data",
                           plotTitle = "raw data",
                           mapOptions=True)
-        plot.plot_image(data, extent=(0,100,0,100), axis='off')
+        plot.plot_image(data, extent=(0,100,0,100), axis='on')
         plot.Show()
     
     def on_compute_correlation(self, event):
@@ -877,12 +891,12 @@ When interval is '2' correlation and scedasticity will be computed between every
             self.__progressBar.SetValue(len(self.__data)-self.__filesInterval)  
             self.__scedasticity = np.vstack(correlation)
         # vertical stack data
-        data = np.flipud( self.__scedasticity )
+        data = np.array( self.__scedasticity )
         # plot data
         plot = PlotFigure(parent=self, title="scedasticity", 
                           plotTitle="correlation interval %i"%self.__filesInterval,
                           mapOptions=True)
-        plot.plot_image(data, extent=(0,100,0,100), axis='off', colormap="jet")
+        plot.plot_image(data, extent=(0,100,0,100), axis='on', colormap="jet")
         plot.Show()
 
     def __update_read_files_parameters(self, comment, delimiter, headerLines, footerLines, useColumn):
@@ -917,7 +931,7 @@ When interval is '2' correlation and scedasticity will be computed between every
         
 class MyApp(wx.App):
     def OnInit(self):
-        frame = MainFrame(None, -1, 'Ranked set data analysis')
+        frame = MainFrame(None, -1, 'Ranked data set analysis')
         # populate files automatically
         path = "C:\\Users\\aoun\\Documents\\collaboration\\zonghai\\diffraction_11IDC_10APR2014\\mixed"
         files = [os.path.join(path,fn) for fn in next(os.walk(path))[2] if ".chi" in fn]
