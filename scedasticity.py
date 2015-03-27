@@ -249,7 +249,7 @@ class PlotFigure(wx.Dialog):
         if returned == wx.ID_CANCEL:
             return 
         # get and format fname
-        fname = saveFileDialog.GetPath()
+        fname = dialog.GetPath()
         # export data
         np.savetxt(fname, self.__usedData, fmt='%.8e', delimiter='  ', 
                    newline='\n', 
