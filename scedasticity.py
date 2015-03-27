@@ -199,7 +199,7 @@ class PlotFigure(wx.Dialog):
         self.__sliderMax = 1000
         # initialize data
         self.__allData  = None
-        self.__dataUsed = None
+        self.__usedData = None
         self.__image    = None
         self.__vector   = None
         # create figure, axes and canvas
@@ -207,8 +207,12 @@ class PlotFigure(wx.Dialog):
         self.__axes = self.__figure.add_subplot(111)
         self.__axes.set_title(str(plotTitle))
         self.__canvas = FigureCanvas(self, -1, self.__figure)
+        self.__canvas.draw = self.draw
         self.__toolbar = NavigationToolbar2Wx(self.__canvas)
-        self.__toolbar.DeleteToolByPos(0) 
+        #self.__toolbar.DeleteToolByPos(0) 
+        # reset plot
+        #replot = wx.Button(self, -1, label="Re-plot")
+        #self.Bind(wx.EVT_BUTTON, self.on_replot, replot)
         # export data button
         exportData = wx.Button(self, -1, label="Export data")
         self.Bind(wx.EVT_BUTTON, self.on_export_data, exportData)
@@ -217,6 +221,7 @@ class PlotFigure(wx.Dialog):
         self.__sizer.Add(self.__canvas, proportion=1, flag=wx.ALL|wx.EXPAND, border=2)
         toolbarSizer.Add(self.__toolbar, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
         toolbarSizer.AddSpacer(20)
+        #toolbarSizer.Add(replot, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
         toolbarSizer.Add(exportData, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
         self.__sizer.Add(toolbarSizer,  proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
         # add map options
@@ -225,11 +230,13 @@ class PlotFigure(wx.Dialog):
         # set sizer 
         self.SetSizer(self.__sizer)
         self.Fit()
-        # bind zooming
-        self.__canvas.mpl_connect("button_release_event", self.on_matplotlib_mouse_release)
         
-        
-        
+    def draw(self, drawDC=None):
+        FigureCanvas.draw(self.__canvas, drawDC=drawDC)
+        xlimits = [int(l) for l in self.__axes.get_xlim()]
+        ylimits = [int(l) for l in self.__axes.get_ylim()]
+        self.__limits = [ylimits[0],ylimits[1],xlimits[0],xlimits[1]]
+       
     def on_export_data(self, event):
         dialog = wx.FileDialog(parent=self, 
                                        message="Save Data", 
@@ -244,29 +251,18 @@ class PlotFigure(wx.Dialog):
         # get and format fname
         fname = saveFileDialog.GetPath()
         # export data
-        np.savetxt(fname, self.__dataUsed, fmt='%.8e', delimiter='  ', 
+        np.savetxt(fname, self.__usedData, fmt='%.8e', delimiter='  ', 
                    newline='\n', 
                    header="B. Aoun et al; Journal of Power Sources 279 (2015) 246-251", 
                    footer='', 
                    comments='# ')
         
-        
-    def on_matplotlib_mouse_release(self, event):
-        """ print zoom-mode after  'button_press_event'  """
-        #print self.__toolbar.mode
-        if self.__toolbar.mode == "zoom rect":
-            if self.__image is not None:
-                xlimits = [int(l) for l in self.__axes.get_xlim()]
-                ylimits = [int(l) for l in self.__axes.get_ylim()]
-                self.__limits = [ylimits[0],ylimits[1],xlimits[0],xlimits[1]]
-                # recompute slider values
-                self.on_max_value_slider(None)
 
     def plot_vector(self, data,
                           axis='on',
                           xLabel="number or files", yLabel="correlation",
                           ticksDirection="out"):
-        self.__dataUsed   = data
+        self.__usedData   = data
         self.__vector = self.__axes.plot(data)
         self.__axes.axis(axis)
         self.__axes.set_xlabel(xLabel)
@@ -279,11 +275,11 @@ class PlotFigure(wx.Dialog):
                          xLabel="number or points", yLabel="number of files",
                          ticksDirection="out"):
         # normalize data
-        self.__dataUsed = data
-        self.__dMin = float(np.nanmin(self.__dataUsed))
-        self.__dMax = float(np.nanmax(self.__dataUsed))
+        self.__usedData = data
+        self.__dMin = float(np.nanmin(self.__usedData))
+        self.__dMax = float(np.nanmax(self.__usedData))
         # plot image
-        self.__image = self.__axes.imshow( (self.__dataUsed-self.__dMin)/(self.__dMax-self.__dMin), 
+        self.__image = self.__axes.imshow( (self.__usedData-self.__dMin)/(self.__dMax-self.__dMin), 
                                             aspect="auto", origin=origin)
         #self.__image.set_extent(extent)
         self.__axes.axis(axis)
@@ -294,9 +290,8 @@ class PlotFigure(wx.Dialog):
         # set colormap
         self.set_cmap(colormap)
         # set limits
-        self.__limits = [0,self.__dataUsed.shape[0],0,self.__dataUsed.shape[1]]
-        
-        
+        #self.__limits = [0,self.__usedData.shape[0],0,self.__usedData.shape[1]]
+         
     def set_cmap(self, colormap):
         idx = self.__cmps.FindString(colormap)
         if idx == -1:
@@ -307,6 +302,7 @@ class PlotFigure(wx.Dialog):
     def set_colormap(self, colormap):
         if self.__image is None: return
         self.__image.set_cmap(colormap)
+        #FigureCanvasBase.draw(self.__canvas)
         self.__canvas.draw()
         
     def create_map_panel(self):
@@ -337,10 +333,10 @@ class PlotFigure(wx.Dialog):
         
     def on_min_value_slider(self, event):
         # get data
-        data = np.copy(self.__dataUsed[self.__limits[0]:self.__limits[1], self.__limits[2]:self.__limits[3]])
+        data = np.copy(self.__usedData)
         # bring data to positive values
-        dmin = np.nanmin(data)
-        dmax = np.nanmax(data)-dmin
+        dmin = np.nanmin(self.__usedData[self.__limits[0]:self.__limits[1],self.__limits[2]:self.__limits[3]])
+        dmax = np.nanmax(self.__usedData[self.__limits[0]:self.__limits[1],self.__limits[2]:self.__limits[3]])-dmin
         data -= dmin
         # get min and max
         minValue = self.__minValueSlider.GetValue()
@@ -357,14 +353,18 @@ class PlotFigure(wx.Dialog):
         dmax = np.nanmax(data)
         # plot
         self.__axes.images[0].set_data( (data-dmin)/(dmax-dmin) )
+        # set axis
+        self.__axes.set_xlim(self.__limits[2],self.__limits[3])
+        self.__axes.set_ylim(self.__limits[0],self.__limits[1])
+        # redraw
         self.__canvas.draw()
         
     def on_max_value_slider(self, event):
         # get data
-        data = np.copy(self.__dataUsed[self.__limits[0]:self.__limits[1], self.__limits[2]:self.__limits[3]])
+        data = np.copy(self.__usedData)
         # bring data to positive values
-        dmin = np.nanmin(data)
-        dmax = np.nanmax(data)-dmin
+        dmin = np.nanmin(self.__usedData[self.__limits[0]:self.__limits[1],self.__limits[2]:self.__limits[3]])
+        dmax = np.nanmax(self.__usedData[self.__limits[0]:self.__limits[1],self.__limits[2]:self.__limits[3]])-dmin
         data -= dmin
         # get min and max
         minValue = self.__minValueSlider.GetValue()
@@ -381,6 +381,10 @@ class PlotFigure(wx.Dialog):
         dmax = np.nanmax(data)
         # plot
         self.__axes.images[0].set_data( (data-dmin)/(dmax-dmin) )
+        # set axis
+        self.__axes.set_xlim(self.__limits[2],self.__limits[3])
+        self.__axes.set_ylim(self.__limits[0],self.__limits[1])
+        # redraw
         self.__canvas.draw()
         
     
@@ -389,6 +393,8 @@ class About(wx.Dialog):
     def __init__(self, title="About"):
         wx.Dialog.__init__(self, None, -1, title=title, size=(750,500), style=wx.DEFAULT_DIALOG_STYLE|wx.RESIZE_BORDER)
         self.CenterOnScreen(wx.BOTH)
+        # set background color
+        self.SetBackgroundColour(wx.WHITE)
         # create paper text
         paper = "B. Aoun et al; Journal of Power Sources 279 (2015) 246-251"
         paper = wx.StaticText(self, -1, paper, (30,15), style=wx.ALIGN_CENTRE)
@@ -440,8 +446,8 @@ class MainFrame(wx.Frame):
         # initialize variables
         self.__files        = []
         # initialize data
-        self.__allData  = None
-        self.__dataUsed = None
+        self.__allData  = []
+        self.__usedData = []
         # initialize analysis data
         self.initialize_analysis_data()
         # analysis variable
@@ -611,7 +617,7 @@ When interval is '2' correlation and scedasticity will be computed between every
         self.Bind(wx.EVT_TEXT, self.on_files_interval, self.__filesIntervalWid)
         # create scedasticityWindowSize
         self.__scedasticityWindowSizeWid = wx.TextCtrl(panel, value=str(self.__scedasticityWindowSize) )
-        wid = Widget(parent=panel, title="Scedasticity window Size", widget=self.__scedasticityWindowSizeWid, help = "Set the window size or interval to compute scedasticity. It must be an odd positive integer")
+        wid = Widget(parent=panel, title="Scedasticity window Size", widget=self.__scedasticityWindowSizeWid, help = "Set the window size (delta theta in formula) to compute scedasticity. It must be an odd positive integer")
         mainSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
         self.Bind(wx.EVT_TEXT, self.on_scedasticity_window_size, self.__scedasticityWindowSizeWid)
         ########################  add all to mainSizer  ########################
@@ -655,7 +661,7 @@ HIT ENTER TO VALIDATE")
         self.Bind(wx.EVT_TEXT_ENTER, self.on_use_data_points, self.__useDataPointsWid)
         # create ignoreDataPoints
         self.__ignoreDataPointsWid = wx.TextCtrl(panel, value=str("") , style=wx.TE_PROCESS_ENTER)
-        wid = Widget(parent=panel, title="Ignore files", widget=self.__ignoreDataPointsWid, 
+        wid = Widget(parent=panel, title="Ignore data points", widget=self.__ignoreDataPointsWid, 
                      help = "Set the data points range to ignore. \
 By default, an empty field means no data points are ignored. \
 Entry can be a real range such as from:to:step (e.g. 0:100:1), \
@@ -725,6 +731,14 @@ HIT ENTER TO VALIDATE")
         self.__useFilesWid.ChangeValue(newStr)
         if val is not False:
             self.__set_used_data()
+        else:
+            dlg = wx.MessageDialog(self, "Set the data files range to use. \
+By default, an empty field means all data files are used. \
+Entry can be a real range such as from:to:step (e.g. 0:100:1), \
+or comma separated data indexes (e.g. 0,1,2,100,200,201)", 
+            "Wrong range", wx.OK|wx.ICON_WARNING)
+            result = dlg.ShowModal()
+            dlg.Destroy()
         
     def on_ignore_data_files(self, event):
         newStr, val = GET_INDEX_RANGE_FROM_STRING(self.__ignoreFilesWid.GetValue())
@@ -736,7 +750,15 @@ HIT ENTER TO VALIDATE")
         self.__ignoreFilesWid.ChangeValue(newStr)
         if val is not False:
             self.__set_used_data()
-         
+        else:
+            dlg = wx.MessageDialog(self, "Set the data files range to ignore. \
+By default, an empty field means no data files are ignored. \
+Entry can be a real range such as from:to:step (e.g. 0:100:1), \
+or comma separated data indexes (e.g. 0,1,2,100,200,201).", 
+            "Wrong range", wx.OK|wx.ICON_WARNING)
+            result = dlg.ShowModal()
+            dlg.Destroy()
+            
     def on_use_data_points(self, event):
         newStr, val = GET_INDEX_RANGE_FROM_STRING(self.__useDataPointsWid.GetValue())
         if newStr is False:
@@ -747,7 +769,15 @@ HIT ENTER TO VALIDATE")
         self.__useDataPointsWid.ChangeValue(newStr)
         if val is not False:
             self.__set_used_data()
-        
+        else:
+            dlg = wx.MessageDialog(self, "Set the data points range to use. \
+By default, an empty field means all data points are used. \
+Entry can be a real range such as from:to:step (e.g. 0:100:1), \
+or comma separated data indexes (e.g. 0,1,2,100,200,201).", 
+            "Wrong range", wx.OK|wx.ICON_WARNING)
+            result = dlg.ShowModal()
+            dlg.Destroy()
+            
     def on_ignore_data_points(self, event):
         newStr, val = GET_INDEX_RANGE_FROM_STRING(self.__ignoreDataPointsWid.GetValue())
         if newStr is False:
@@ -758,7 +788,15 @@ HIT ENTER TO VALIDATE")
         self.__ignoreDataPointsWid.ChangeValue(newStr)
         if val is not False:
             self.__set_used_data()
-        
+        else:
+            dlg = wx.MessageDialog(self, "Set the data points range to ignore. \
+By default, an empty field means no data points are ignored. \
+Entry can be a real range such as from:to:step (e.g. 0:100:1), \
+or comma separated data indexes (e.g. 0,1,2,100,200,201).",
+            "Wrong range", wx.OK|wx.ICON_WARNING)
+            result = dlg.ShowModal()
+            dlg.Destroy()
+            
     def on_manipulate_data(self, event):
         formula = str( self.__manipulateDataFormulaWid.GetValue() ).strip()
         if not len(formula):
@@ -789,8 +827,8 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
             
     def __set_used_data(self):
         self.initialize_analysis_data()
-        if self.__allData is None:
-            self.__dataUsed = None
+        if not len(self.__allData):
+            self.__usedData = []
             return
         # set dataUsed
         npoints = len(self.__allData[0])
@@ -818,11 +856,11 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
         useFiles = np.array([idx for idx in sorted(usePoints-ignorePoints) if idx < npoints], dtype=np.int)
         # apply formula
         if len(self.__manipulateDataFormula):
-            self.__dataUsed = []
+            self.__usedData = []
             for dataFile in data:
-                self.__dataUsed.append( eval(self.__manipulateDataFormula) )  
+                self.__usedData.append( eval(self.__manipulateDataFormula) )  
         else:
-            self.__dataUsed = [d[useFiles] for d in data]  
+            self.__usedData = [d[useFiles] for d in data]  
         
     def on_default_dir(self, event):
         dialog = wx.DirDialog (None, 
@@ -949,9 +987,14 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
             event.GetEventObject().ChangeValue(str(self.__scedasticityWindowSize))      
         elif val % 2 == 0:
             val -= 1
-            event.GetEventObject().ChangeValue(str(val))      
+            event.GetEventObject().ChangeValue(str(val))  
+            self.__scedasticityWindowSize = val  
+            # reset calculations
+            self.initialize_analysis_data()            
         else:            
             self.__scedasticityWindowSize = val
+            # reset calculations
+            self.initialize_analysis_data()
 
     def on_files_interval(self, event):
         try:
@@ -1080,15 +1123,22 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
         self.__progressBar.SetValue(len(self.__files))    
             
     def on_plot_data(self, event):
-        if not len(self.__dataUsed):
+        if not len(self.__allData):
             warnings.warn("must load data first.")
             dlg = wx.MessageDialog(self, "must load data first.",
                   "No data found", wx.OK|wx.ICON_WARNING)
             result = dlg.ShowModal()
             dlg.Destroy()
             return
+        if not len(self.__usedData):
+            warnings.warn("Used data range returns no data.")
+            dlg = wx.MessageDialog(self, "Used data range returns no data.",
+                  "Wrong data range", wx.OK|wx.ICON_WARNING)
+            result = dlg.ShowModal()
+            dlg.Destroy()
+            return
         # vertical stack data
-        data = np.vstack(self.__dataUsed)
+        data = np.vstack(self.__usedData)
         # plot data
         plot = PlotFigure(parent=self, title="raw data",
                           plotTitle = "raw data",
@@ -1097,14 +1147,21 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
         plot.Show()
     
     def on_compute_correlation(self, event):
-        if not len(self.__dataUsed):
+        if not len(self.__allData):
             warnings.warn("must load data first.")
             dlg = wx.MessageDialog(self, "must load data first.",
                   "No data found", wx.OK|wx.ICON_WARNING)
             result = dlg.ShowModal()
             dlg.Destroy()
             return
-        if len(self.__dataUsed) <= 1:
+        if not len(self.__usedData):
+            warnings.warn("Used data range returns no data.")
+            dlg = wx.MessageDialog(self, "Used data range returns no data.",
+                  "Wrong data range", wx.OK|wx.ICON_WARNING)
+            result = dlg.ShowModal()
+            dlg.Destroy()
+            return
+        if len(self.__usedData) <= 1:
             warnings.warn("At least two data set must be loaded")
             dlg = wx.MessageDialog(self, "At least two data set must be loaded.",
                   "Not enough data found", wx.OK|wx.ICON_WARNING)
@@ -1114,10 +1171,10 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
         if self.__correlation is None:
             correlation = []
             self.__progressBar.SetValue(0)  
-            self.__progressBar.SetRange(len(self.__dataUsed)-1)
-            for idx in range(0,len(self.__dataUsed)-1, self.__filesInterval):
-                y0 = self.__dataUsed[idx]
-                y1 = self.__dataUsed[idx+1]
+            self.__progressBar.SetRange(len(self.__usedData)-1)
+            for idx in range(0,len(self.__usedData)-1, self.__filesInterval):
+                y0 = self.__usedData[idx]
+                y1 = self.__usedData[idx+1]
                 # create correlation vector
                 y0mean = np.mean(y0)
                 y1mean = np.mean(y1)
@@ -1130,7 +1187,7 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
                 self.__progressBar.SetValue(idx+1)
             self.__correlation = np.array(correlation)
         # reset progress bar
-        self.__progressBar.SetValue(len(self.__dataUsed)-1)  
+        self.__progressBar.SetValue(len(self.__usedData)-1)  
         # plot data
         plot = PlotFigure(parent=self, title="correlation", plotTitle="correlation interval %i"%self.__filesInterval)
         plot.plot_vector(self.__correlation)
@@ -1150,34 +1207,41 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
         return corr
         
     def on_compute_scedasticity(self, event):
-        if not len(self.__dataUsed):
+        if not len(self.__allData):
             warnings.warn("must load data first.")
             dlg = wx.MessageDialog(self, "must load data first.",
                   "No data found", wx.OK|wx.ICON_WARNING)
             result = dlg.ShowModal()
             dlg.Destroy()
             return
+        if not len(self.__usedData):
+            warnings.warn("Used data range returns no data.")
+            dlg = wx.MessageDialog(self, "Used data range returns no data.",
+                  "Wrong data range", wx.OK|wx.ICON_WARNING)
+            result = dlg.ShowModal()
+            dlg.Destroy()
+            return
         windowSize=float(self.__scedasticityWindowSize)
-        assert windowSize<=len(self.__dataUsed[0]), "scedasticity size cannot be bigger than the data size"
+        assert windowSize<=len(self.__usedData[0]), "scedasticity size cannot be bigger than the data size"
         halfwindow = int(windowSize/2)
         if self.__scedasticity is None:
             correlation = []
             self.__progressBar.SetValue(0)  
-            self.__progressBar.SetRange(len(self.__dataUsed)-self.__filesInterval)
-            for idx in range(0, len(self.__dataUsed)-self.__filesInterval): 
-                y0 = self.__dataUsed[idx]
-                y1 = self.__dataUsed[idx+self.__filesInterval] 
+            self.__progressBar.SetRange(len(self.__usedData)-self.__filesInterval)
+            for idx in range(0, len(self.__usedData)-self.__filesInterval): 
+                y0 = self.__usedData[idx]
+                y1 = self.__usedData[idx+self.__filesInterval] 
                 correlation.append(self.__get_scedasticity_correlation(y0,y1, halfwindow))
                 # update bar
                 self.__progressBar.SetValue(idx+1)
             # reset progress bar
-            self.__progressBar.SetValue(len(self.__dataUsed)-self.__filesInterval)  
+            self.__progressBar.SetValue(len(self.__usedData)-self.__filesInterval)  
             self.__scedasticity = np.vstack(correlation)
         # vertical stack data
         data = np.array( self.__scedasticity )
         # plot data
         plot = PlotFigure(parent=self, title="scedasticity", 
-                          plotTitle="correlation interval %i"%self.__filesInterval,
+                          plotTitle="interval %i - window %i"%(self.__filesInterval, self.__scedasticityWindowSize),
                           mapOptions=True)
         plot.plot_image(data, extent=(0,100,0,100), axis='on', colormap="jet")
         plot.Show()
@@ -1216,10 +1280,10 @@ class MyApp(wx.App):
     def OnInit(self):
         frame = MainFrame(None, -1, 'Ranked data analysis ( B. Aoun et al )')
         # populate files automatically
-        #path = "C:\\Users\\aoun\\Documents\\collaboration\\zonghai\\diffraction_11IDC_10APR2014\\mixed"
-        #files = [os.path.join(path,fn) for fn in next(os.walk(path))[2] if ".chi" in fn]
-        #frame.populate_files([files[idx] for idx in range(0, len(files), 3)])
-        #frame.on_chi_file_parameter(None)
+        path = "C:\\Users\\aoun\\Documents\\collaboration\\zonghai\\diffraction_11IDC_10APR2014\\mixed"
+        files = [os.path.join(path,fn) for fn in next(os.walk(path))[2] if ".chi" in fn]
+        frame.populate_files([files[idx] for idx in range(0, len(files), 30)])
+        frame.on_chi_file_parameter(None)
         frame.Show(True)
         return True
 
