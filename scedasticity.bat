@@ -1,1 +1,1 @@
-start python aoun_data_analysis.py
+start python scedasticity.py

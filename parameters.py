@@ -2,4 +2,4 @@
 import os
 
 parameters = {}
-parameters['defaultdir'] = os.path.expanduser("~")
+parameters['defaultdir'] = "C:\\Users\\aoun\\Documents\\collaboration\\zonghai\\diffraction_11IDC_29MAR2014\\data"

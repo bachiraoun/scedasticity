@@ -387,13 +387,19 @@ class PlotFigure(wx.Dialog):
     
 class About(wx.Dialog):
     def __init__(self, title="About"):
-        wx.Dialog.__init__(self, None, -1, title=title, size=(750,300), style=wx.DEFAULT_DIALOG_STYLE|wx.RESIZE_BORDER)
+        wx.Dialog.__init__(self, None, -1, title=title, size=(750,500), style=wx.DEFAULT_DIALOG_STYLE|wx.RESIZE_BORDER)
         self.CenterOnScreen(wx.BOTH)
-
+        # create paper text
         paper = "B. Aoun et al; Journal of Power Sources 279 (2015) 246-251"
         paper = wx.StaticText(self, -1, paper, (30,15), style=wx.ALIGN_CENTRE)
         paperfont = wx.Font(10, wx.MODERN, wx.ITALIC, wx.BOLD)
         paper.SetFont(paperfont)
+        # create correlation formula image
+        correlationIm = wx.StaticBitmap(self)
+        correlationIm.SetBitmap(wx.Bitmap('correlation_formula.PNG'))
+        # create scedasticity formula image
+        scedasticityIm = wx.StaticBitmap(self)
+        scedasticityIm.SetBitmap(wx.Bitmap('scedasticity_formula.PNG'))
         
         description = "This software is about a generalized method used to extract \
 critical information from series of ranked correlated data. \
@@ -407,6 +413,10 @@ correlation functions and statistical scedasticity formalism."
         
         vbox = wx.BoxSizer(wx.VERTICAL)
         vbox.Add(description, 1, wx.ALIGN_CENTER|wx.BOTTOM, 2)
+        vbox.AddSpacer(20)
+        vbox.Add(correlationIm, 0,wx.ALIGN_CENTER|wx.BOTTOM, 2)
+        vbox.Add(scedasticityIm, 0,wx.ALIGN_CENTER|wx.BOTTOM, 2)
+        vbox.AddSpacer(20)
         vbox.Add(paper, 0, wx.ALIGN_CENTER|wx.TOP, 2)
         self.SetSizer(vbox)
         
@@ -1205,6 +1215,11 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
 class MyApp(wx.App):
     def OnInit(self):
         frame = MainFrame(None, -1, 'Ranked data analysis ( B. Aoun et al )')
+        # populate files automatically
+        #path = "C:\\Users\\aoun\\Documents\\collaboration\\zonghai\\diffraction_11IDC_10APR2014\\mixed"
+        #files = [os.path.join(path,fn) for fn in next(os.walk(path))[2] if ".chi" in fn]
+        #frame.populate_files([files[idx] for idx in range(0, len(files), 3)])
+        #frame.on_chi_file_parameter(None)
         frame.Show(True)
         return True
 
