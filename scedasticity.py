@@ -18,7 +18,6 @@ except:
 try:
     import matplotlib
     import matplotlib.pyplot as plt
-    #matplotlib.use('WXAgg')
     from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as FigureCanvas
     from matplotlib.backends.backend_wx import NavigationToolbar2Wx, _load_bitmap
     from matplotlib.figure import Figure
@@ -34,11 +33,9 @@ except:
 
 # set default dir
 DEFAULT_DIR = os.path.abspath(PARAMETERS["defaultdir"])
-DEFAULT_DIR = os.path.abspath(PARAMETERS["defaultdir"])
-DEFAULT_DIR = os.path.abspath(PARAMETERS["defaultdir"])
-
 if not os.path.isdir(DEFAULT_DIR) or not os.path.exists(DEFAULT_DIR):
     DEFAULT_DIR = os.path.expanduser("~")
+
 
 def SET_GENERAL_PARAMETERS(**kwargs):
     params = globals()["PARAMETERS"]
@@ -63,96 +60,34 @@ def SET_GENERAL_PARAMETERS(**kwargs):
     
     
 class Widget(wx.BoxSizer):
-    # general parameters
-    __parameters__ = {}
-    __parameters__["orient"] = wx.HORIZONTAL
-    __parameters__["spacer"] = 10
-    __parameters__["labelSiserKwargs"] = {"proportion":0, "flag":wx.ALL|wx.ALIGN_CENTER_VERTICAL, "border":2}
-    __parameters__["widgetSiserKwargs"] = {"proportion":1, "flag":wx.ALL|wx.EXPAND, "border":2}
-    
-    def __init__(self, parent, title, widget,
-                       help = None,
-                       orient = None,
-                       spacer = None,
-                       labelSiserKwargs = None,
-                       widgetSiserKwargs = None):
-        # get parent
-        self.__set_parent__(parent)
-        # get widget
-        self.__set_widget__(widget)
-        # get orient
-        orient = self.__get_orientation__(orient)
-        # get spacer
-        spacer = self.__get_spacer__(spacer)
-        # get label
-        title = str(title)
-        # set label and widget siser kwargs
-        labelSiserKwargs = self.__get_sizer_kwargs__(labelSiserKwargs, "labelSiserKwargs")
-        widgetSiserKwargs = self.__get_sizer_kwargs__(widgetSiserKwargs, "widgetSiserKwargs")
+    def __init__(self, parent, title, widget, help=""):
+        # check parent
+        assert isinstance(parent, wx.Window), "parent is normally the panel of the created wx.Window"
+        # check widget
+        assert isinstance(widget, (wx.Window,wx.Sizer) ),"widget must be a wx.Window or wx.Sizer for multiple widgets"
+        # check help
+        assert isinstance(help, str),"help must be a string"
+        # initialize variables
+        widgetSiserKwargs = {"proportion":1, "flag":wx.ALL|wx.EXPAND, "border":2}
+        labelSiserKwargs  = {"proportion":0, "flag":wx.ALL|wx.ALIGN_CENTER_VERTICAL, "border":2}
+        spacer            = 10
+        orient            = wx.HORIZONTAL
         # initialize
         wx.BoxSizer.__init__(self,orient)
-        # get help
-        if help is not None:
-            help = "%s"%help
-        else:
-            help = ""
         # construct widget
+        title = str(title)
         if len(title):
-            self.__title = wx.StaticText(parent=self.__parent, id=-1, label=title, style=wx.ALIGN_LEFT)
-            self.__title.SetToolTip( wx.ToolTip("%s"%(help)) )
-            self.Add( self.__title, **labelSiserKwargs)
+            title = wx.StaticText(parent=parent, id=-1, label=title, style=wx.ALIGN_LEFT)
+            title.SetToolTip( wx.ToolTip("%s"%(help)) )
+            self.Add( title, **labelSiserKwargs)
             self.AddSpacer(spacer)
         else:
-            self.__title = None
-            self.__widget.SetToolTip( wx.ToolTip("%s"%(help)) )
-        self.Add( self.__widget, **widgetSiserKwargs)
+            title = None
+            widget.SetToolTip( wx.ToolTip("%s"%(help)) )
+        # add widget to self
+        self.Add( widget, **widgetSiserKwargs)
 
-    @property
-    def parent(self):
-        return self.__parent
-        
-    @property
-    def widget(self):
-        return self.__widget
-    
-    @property
-    def title(self):
-        return self.__title
-        
-    def __set_parent__(self, parent):
-        assert isinstance(parent, wx.Window), "parent is normally the panel of the created wx.Window"
-        self.__parent = parent
-        
-    def __set_widget__(self, widget):
-        assert isinstance(widget, (wx.Window,wx.Sizer) ),"widget must be a wx.Window or wx.Sizer for multiple widgets"
-        self.__widget = widget
-                
-    def __get_orientation__(self, orient):
-        if orient is None:
-            return self.__parameters__["orient"]
-        else:
-            assert orient in (wx.HORIZONTAL, wx.VERTICAL), "orient must be either wx.HORIZONTAL or wx.VERTICAL"
-            return orient
-                 
-    def __get_spacer__(self, spacer):
-        if spacer is None:
-            return self.__parameters__["spacer"]
-        else:
-            assert isinstance(spacer, int) ,"spacer must be a positif integer"
-            assert spacer >= 0  ,"spacer must be a positif integer"
-            return spacer     
-       
-    def __get_sizer_kwargs__(self, kwargs, key):
-        if kwargs is None:
-            return self.__parameters__[key] 
-        else:
-            assert isinstance(kwargs,dict), "kwargs must be a python dictionary"
-            kwargsKeys = kwargs.keys()
-            keys = self.__parameters__[key].keys()
-            falseKeys = [k for k in kwargsKeys if k not in keys]
-            assert not falseKeys, "kwargs keys %s unknown" %falseKeys
-            return kwargs
-        
+
 
 class FloatSlider(wx.Slider):
     def __init__(self, parent, id=-1, value=0, minval=-1, maxval=1, res=1e-2,
@@ -419,11 +354,12 @@ class About(wx.Dialog):
         paperfont = wx.Font(10, wx.MODERN, wx.ITALIC, wx.BOLD)
         paper.SetFont(paperfont)
         
-        description = "This software is about a generalized method used to extract \
-critical information from series of ranked correlated data. The method is generally \
-applicable to all types of spectra evolving as a function of any arbitrary parameter. \
-This approach is based on correlation functions and statistical scedasticity formalism."
-        description = wx.StaticText(self, -1, description,(30,15), style=wx.ALIGN_LEFT) 
+        description = "This software is about a generalized method used to extract\n\
+critical information from series of ranked correlated data.\n\
+The method is generally applicable to all types of spectra evolving\n\
+as a function of any arbitrary parameter. This approach is based on\n\
+correlation functions and statistical scedasticity formalism."
+        description = wx.StaticText(self, -1, description,(30,15), style=wx.ALIGN_CENTRE) 
         descriptionFont = wx.Font(12, wx.MODERN, wx.NORMAL, wx.NORMAL)
         description.SetFont(descriptionFont) 
         
@@ -438,7 +374,6 @@ class MainFrame(wx.Frame):
     def __init__(self, parent, id, title):
         wx.Frame.__init__(self, parent, id, title, wx.DefaultPosition, wx.Size(900, 500))
         self.SetIcon(wx.Icon('scedasticity16X16.PNG',wx.BITMAP_TYPE_PNG, 16,16))
-        
         # initialize variables
         self.__files        = []
         self.__data         = []
