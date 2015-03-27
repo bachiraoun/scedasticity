@@ -58,6 +58,46 @@ def SET_GENERAL_PARAMETERS(**kwargs):
         fd.write("parameters['%s'] = %s\n"%(str(k),str(v)))
     fd.close()
     
+
+def GET_INDEX_RANGE_FROM_STRING(valStr):
+    valStr = str(valStr)
+    if not len(valStr.strip()):
+        return "",None
+    # if range wit : given
+    if ":" in valStr:
+        val = valStr.split(":")
+        if len(val)!=3:
+            return False, False
+        try:
+            val = [int(v) for v in val]
+        except:
+            return False, False
+        for v in val:
+            if v <0:
+                return False, False
+            if val[0]>=val[1]:
+                return False, False 
+            if val[2]==0:
+                return False, False 
+        newStr = "%i : %i : %i"%(val[0], val[1], val[2])
+        val    = range(val[0], val[1], val[2])
+        return newStr, val
+    # if numbers wit : given
+    else:
+        val = valStr.split(",")
+        try:
+            val = [int(v) for v in val if v.strip()]
+        except:
+            return False, False 
+        for v in val:
+            if v <0:
+                return False, False 
+        val    = sorted(set(val))
+        newStr = ""
+        for v in val:
+            newStr += "%i, "%v
+        return newStr, val 
+    
     
 class Widget(wx.BoxSizer):
     def __init__(self, parent, title, widget, help=""):
@@ -158,9 +198,10 @@ class PlotFigure(wx.Dialog):
         # slider settings
         self.__sliderMax = 1000
         # initialize data
-        self.__data   = None
-        self.__image  = None
-        self.__vector = None
+        self.__allData  = None
+        self.__dataUsed = None
+        self.__image    = None
+        self.__vector   = None
         # create figure, axes and canvas
         self.__figure = Figure()
         self.__axes = self.__figure.add_subplot(111)
@@ -203,7 +244,7 @@ class PlotFigure(wx.Dialog):
         # get and format fname
         fname = saveFileDialog.GetPath()
         # export data
-        np.savetxt(fname, self.__data, fmt='%.8e', delimiter='  ', 
+        np.savetxt(fname, self.__dataUsed, fmt='%.8e', delimiter='  ', 
                    newline='\n', 
                    header="B. Aoun et al; Journal of Power Sources 279 (2015) 246-251", 
                    footer='', 
@@ -225,7 +266,7 @@ class PlotFigure(wx.Dialog):
                           axis='on',
                           xLabel="number or files", yLabel="correlation",
                           ticksDirection="out"):
-        self.__data   = data
+        self.__dataUsed   = data
         self.__vector = self.__axes.plot(data)
         self.__axes.axis(axis)
         self.__axes.set_xlabel(xLabel)
@@ -238,11 +279,11 @@ class PlotFigure(wx.Dialog):
                          xLabel="number or points", yLabel="number of files",
                          ticksDirection="out"):
         # normalize data
-        self.__data = data
-        self.__dMin = float(np.nanmin(self.__data))
-        self.__dMax = float(np.nanmax(self.__data))
+        self.__dataUsed = data
+        self.__dMin = float(np.nanmin(self.__dataUsed))
+        self.__dMax = float(np.nanmax(self.__dataUsed))
         # plot image
-        self.__image = self.__axes.imshow( (self.__data-self.__dMin)/(self.__dMax-self.__dMin), 
+        self.__image = self.__axes.imshow( (self.__dataUsed-self.__dMin)/(self.__dMax-self.__dMin), 
                                             aspect="auto", origin=origin)
         #self.__image.set_extent(extent)
         self.__axes.axis(axis)
@@ -253,7 +294,7 @@ class PlotFigure(wx.Dialog):
         # set colormap
         self.set_cmap(colormap)
         # set limits
-        self.__limits = [0,self.__data.shape[0],0,self.__data.shape[1]]
+        self.__limits = [0,self.__dataUsed.shape[0],0,self.__dataUsed.shape[1]]
         
         
     def set_cmap(self, colormap):
@@ -296,7 +337,7 @@ class PlotFigure(wx.Dialog):
         
     def on_min_value_slider(self, event):
         # get data
-        data = np.copy(self.__data[self.__limits[0]:self.__limits[1], self.__limits[2]:self.__limits[3]])
+        data = np.copy(self.__dataUsed[self.__limits[0]:self.__limits[1], self.__limits[2]:self.__limits[3]])
         # bring data to positive values
         dmin = np.nanmin(data)
         dmax = np.nanmax(data)-dmin
@@ -320,7 +361,7 @@ class PlotFigure(wx.Dialog):
         
     def on_max_value_slider(self, event):
         # get data
-        data = np.copy(self.__data[self.__limits[0]:self.__limits[1], self.__limits[2]:self.__limits[3]])
+        data = np.copy(self.__dataUsed[self.__limits[0]:self.__limits[1], self.__limits[2]:self.__limits[3]])
         # bring data to positive values
         dmin = np.nanmin(data)
         dmax = np.nanmax(data)-dmin
@@ -354,11 +395,12 @@ class About(wx.Dialog):
         paperfont = wx.Font(10, wx.MODERN, wx.ITALIC, wx.BOLD)
         paper.SetFont(paperfont)
         
-        description = "This software is about a generalized method used to extract\n\
-critical information from series of ranked correlated data.\n\
-The method is generally applicable to all types of spectra evolving\n\
-as a function of any arbitrary parameter. This approach is based on\n\
+        description = "This software is about a generalized method used to extract \
+critical information from series of ranked correlated data. \
+The method is generally applicable to all types of spectra evolving \
+as a function of any arbitrary parameter. This approach is based on \
 correlation functions and statistical scedasticity formalism."
+        description = self.get_paragraph_formated(description)
         description = wx.StaticText(self, -1, description,(30,15), style=wx.ALIGN_CENTRE) 
         descriptionFont = wx.Font(12, wx.MODERN, wx.NORMAL, wx.NORMAL)
         description.SetFont(descriptionFont) 
@@ -368,6 +410,17 @@ correlation functions and statistical scedasticity formalism."
         vbox.Add(paper, 0, wx.ALIGN_CENTER|wx.TOP, 2)
         self.SetSizer(vbox)
         
+    def get_paragraph_formated(self, paragraph, nchar = 50):    
+        para      = paragraph.split()
+        paragraph = ""
+        sentence  = ""
+        for word in para:
+            if len(sentence) >= nchar:
+                paragraph += sentence + "\n"
+                sentence = ""
+            sentence += " "+word
+        paragraph += sentence
+        return paragraph
         
         
 class MainFrame(wx.Frame):
@@ -376,9 +429,11 @@ class MainFrame(wx.Frame):
         self.SetIcon(wx.Icon('scedasticity16X16.PNG',wx.BITMAP_TYPE_PNG, 16,16))
         # initialize variables
         self.__files        = []
-        self.__data         = []
-        self.__correlation  = None
-        self.__scedasticity = None
+        # initialize data
+        self.__allData  = None
+        self.__dataUsed = None
+        # initialize analysis data
+        self.initialize_analysis_data()
         # analysis variable
         self.__filesInterval          = 1
         self.__scedasticityWindowSize = 25
@@ -390,26 +445,53 @@ class MainFrame(wx.Frame):
         self.__useColumn   = 0
         # create main panel
         self.__panel = wx.Panel(self, -1, style=wx.SIMPLE_BORDER)
+        # create menubar
+        self.build_menu_bar()
+        # create notebook
+        self.__notebook = wx.Notebook(self.__panel)
         # create main sizer
         self.__mainSizer   = wx.BoxSizer(wx.VERTICAL)
-        self.__sizerLevel1 = wx.BoxSizer(wx.HORIZONTAL)
-        # create menubar
-        self.create_menu_bar()
         # create files list control
-        self.create_files_list_control(sizer=self.__sizerLevel1)
+        filesListPage = self.build_read_data_page()
+        self.__notebook.AddPage(filesListPage, "Read data")
+        # create data manipulation
+        dataManipulationPage = self.build_data_manipulation_page()
+        self.__notebook.AddPage(dataManipulationPage, "Data manipulation")
         # create variables widgets
-        self.create_variables_widgets(sizer=self.__sizerLevel1)
-        # add sizers
-        self.__mainSizer.Add(self.__sizerLevel1, proportion=1, flag=wx.ALL|wx.EXPAND, border=2)
+        analysisParametersPage = self.build_analysis_parameters_page()
+        self.__notebook.AddPage(analysisParametersPage, "Analysis parameters")
         # create loading variables
-        self.create_action_buttons(sizer=self.__mainSizer)
+        actionButtonsSizer = self.create_action_buttons()
         # create progress bar
         self.__progressBar = wx.Gauge(self.__panel, range=100)
+        # add to main sizer
+        self.__mainSizer.Add(self.__notebook, 1, wx.ALL|wx.EXPAND, 5)
+        self.__mainSizer.Add(actionButtonsSizer, proportion=0, flag=wx.ALL|wx.ALIGN_RIGHT, border=2)
         self.__mainSizer.Add(self.__progressBar, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
         # set sizer
         self.__panel.SetSizerAndFit(self.__mainSizer) 
+        # initialize files reading
+        self.on_chi_file_parameter(None)
+        # data manipulation variables
+        self.initialize_data_manipulation()
          
-    def create_action_buttons(self, sizer):    
+    def initialize_analysis_data(self):
+        self.__correlation  = None
+        self.__scedasticity = None
+    
+    def initialize_data_manipulation(self):
+        self.__useFiles              = {"":None}
+        self.__ignoreFiles           = {"":None}
+        self.__useDataPoints         = {"":None}
+        self.__ignoreDataPoints      = {"":None}
+        self.__manipulateDataFormula = ""
+        self.__useFilesWid.ChangeValue("")
+        self.__ignoreFilesWid.ChangeValue("")
+        self.__useDataPointsWid.ChangeValue("")
+        self.__ignoreDataPointsWid.ChangeValue("")
+        self.__manipulateDataFormulaWid.ChangeValue("")
+        
+    def create_action_buttons(self):    
         # create bozSizer
         sb = wx.StaticBox(self.__panel, label="Available actions")
         horizontalSizer = wx.StaticBoxSizer(sb, wx.HORIZONTAL)
@@ -424,39 +506,39 @@ class MainFrame(wx.Frame):
         horizontalSizer.Add(correlation, proportion=0, flag=wx.ALL, border=2)
         horizontalSizer.Add(scedasticity, proportion=0, flag=wx.ALL, border=2)
         # add to sizer
-        sizer.Add(horizontalSizer, proportion=0, flag=wx.ALL|wx.ALIGN_RIGHT, border=2)
+        return horizontalSizer
         
-    def create_files_list_control(self, sizer):
-        # create bozSizer
-        sb = wx.StaticBox(self.__panel, label="Files are read from top to bottom")
-        verticalSizer = wx.StaticBoxSizer(sb, wx.VERTICAL)
-        horizontalSizer = wx.BoxSizer(wx.HORIZONTAL)
+    def build_read_data_page(self):
+        panel     = wx.Panel(self.__notebook, id=wx.ID_ANY)
+        mainSizer = wx.BoxSizer(wx.HORIZONTAL)
+        ########################  files list control  ########################
+        sb = wx.StaticBox(panel, label="Files are read from top to bottom")
+        listCtrlSizer = wx.StaticBoxSizer(sb, wx.VERTICAL)
+        listCtrlButtSizer = wx.BoxSizer(wx.HORIZONTAL)
         # create list control
-        self.__filesWid = wx.ListBox(self.__panel, -1, style=wx.LB_ALWAYS_SB|wx.LB_HSCROLL|wx.LB_EXTENDED)
-        verticalSizer.Add(self.__filesWid, proportion=1, flag=wx.ALL|wx.EXPAND, border=2)
+        self.__filesWid = wx.ListBox(panel, -1, style=wx.LB_ALWAYS_SB|wx.LB_HSCROLL|wx.LB_EXTENDED)
+        listCtrlSizer.Add(self.__filesWid, proportion=1, flag=wx.ALL|wx.EXPAND, border=2)
         self.Bind(wx.EVT_LISTBOX, self.on_files_selection, self.__filesWid)
         # create actions
-        self.__moveUp = wx.Button(self.__panel, -1, label="Move up")
+        self.__moveUp = wx.Button(panel, -1, label="Move up")
         self.Bind(wx.EVT_BUTTON, self.on_move_up, self.__moveUp)
-        self.__moveDown = wx.Button(self.__panel, -1, label="Move down")
+        self.__moveDown = wx.Button(panel, -1, label="Move down")
         self.Bind(wx.EVT_BUTTON, self.on_move_down, self.__moveDown)
-        self.__invertFilesList = wx.Button(self.__panel, -1, label="Invert")
+        self.__invertFilesList = wx.Button(panel, -1, label="Invert")
         self.Bind(wx.EVT_BUTTON, self.on_invert_order, self.__invertFilesList)
-        self.__discardFile = wx.Button(self.__panel, -1, label="Discard")
+        self.__discardFile = wx.Button(panel, -1, label="Discard")
         self.Bind(wx.EVT_BUTTON, self.on_discard_down, self.__discardFile)
-        #horizontalSizer.AddSpacer(10)
-        self.__LoadData = wx.Button(self.__panel, -1, label="Load")
+        #listCtrlButtSizer.AddSpacer(10)
+        self.__LoadData = wx.Button(panel, -1, label="Load")
         self.Bind(wx.EVT_BUTTON, self.on_load_data, self.__LoadData)
-        # add to horizontalSizer
-        horizontalSizer.Add(self.__moveUp, proportion=1, flag=wx.ALL, border=2)
-        horizontalSizer.Add(self.__moveDown, proportion=1, flag=wx.ALL, border=2)
-        horizontalSizer.Add(self.__invertFilesList, proportion=1, flag=wx.ALL, border=2)
-        horizontalSizer.Add(self.__discardFile, proportion=1, flag=wx.ALL, border=2)
-        horizontalSizer.Add(self.__LoadData, proportion=1, flag=wx.ALL, border=2)
-        # add horizontalSizer
-        verticalSizer.Add(horizontalSizer, proportion=0, flag=wx.ALL|wx.ALIGN_RIGHT, border=2)
-        # add to sizer
-        sizer.Add(verticalSizer, proportion=1, flag=wx.ALL|wx.EXPAND, border=2)
+        # add to listCtrlButtSizer
+        listCtrlButtSizer.Add(self.__moveUp, proportion=1, flag=wx.ALL, border=2)
+        listCtrlButtSizer.Add(self.__moveDown, proportion=1, flag=wx.ALL, border=2)
+        listCtrlButtSizer.Add(self.__invertFilesList, proportion=1, flag=wx.ALL, border=2)
+        listCtrlButtSizer.Add(self.__discardFile, proportion=1, flag=wx.ALL, border=2)
+        listCtrlButtSizer.Add(self.__LoadData, proportion=1, flag=wx.ALL, border=2)
+        # add listCtrlButtSizer
+        listCtrlSizer.Add(listCtrlButtSizer, proportion=0, flag=wx.ALL|wx.ALIGN_RIGHT, border=2)
         # dis-activate all buttons
         self.__moveUp.Enable(False)
         self.__moveDown.Enable(False)
@@ -469,63 +551,127 @@ class MainFrame(wx.Frame):
         self.__invertFilesList.SetToolTip( wx.ToolTip("Invert up side down all files order in the list regardless of selection.") )
         self.__discardFile.SetToolTip( wx.ToolTip("Remove file from list.") )
         self.__LoadData.SetToolTip( wx.ToolTip("Load all files in list regardless of selection.") )
-        
-    def create_variables_widgets(self, sizer):
-        # create main size
-        mainSizer = wx.BoxSizer(wx.VERTICAL)
-        # create bozSizer
-        sb = wx.StaticBox(self.__panel, label="Read files parameters")
+        ########################  reading parameters  ########################
+        sb = wx.StaticBox(panel, label="Read files parameters")
         loadBoxSizer = wx.StaticBoxSizer(sb, wx.VERTICAL)
         # create comment
-        self.__commentWid = wx.TextCtrl(self.__panel, value=self.__comment)
-        wid = Widget(parent=self.__panel, title="Comment", widget=self.__commentWid, help = "The character used to indicate the start of a comment.")
+        self.__commentWid = wx.TextCtrl(panel, value=self.__comment)
+        wid = Widget(parent=panel, title="Comment", widget=self.__commentWid, help = "The character used to indicate the start of a comment.")
         loadBoxSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
         self.Bind(wx.EVT_TEXT, self.on_comment, self.__commentWid)
         # create delimiter
-        self.__delimiterWid = wx.TextCtrl(self.__panel, value=self.__delimiter)
-        wid = Widget(parent=self.__panel, title="Delimiter", widget=self.__delimiterWid, help = "The string used to separate values. By default, no delimiter is given which means any consecutive whitespaces act as delimiter.")
+        self.__delimiterWid = wx.TextCtrl(panel, value=self.__delimiter)
+        wid = Widget(parent=panel, title="Delimiter", widget=self.__delimiterWid, help = "The string used to separate values. By default, no delimiter is given which means any consecutive whitespaces act as delimiter.")
         loadBoxSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
         self.Bind(wx.EVT_TEXT, self.on_delimiter, self.__delimiterWid)
         # create header lines
-        self.__headerLinesWid = wx.TextCtrl(self.__panel, value=str(self.__headerLines))
-        wid = Widget(parent=self.__panel, title="Header", widget=self.__headerLinesWid, help = "Skip the first lines consider as header.")
+        self.__headerLinesWid = wx.TextCtrl(panel, value=str(self.__headerLines))
+        wid = Widget(parent=panel, title="Header", widget=self.__headerLinesWid, help = "Skip the first lines consider as header.")
         loadBoxSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
         self.Bind(wx.EVT_TEXT, self.on_header_lines, self.__headerLinesWid)
         # create footer lines
-        self.__footerLinesWid = wx.TextCtrl(self.__panel, value=str(self.__footerLines))
-        wid = Widget(parent=self.__panel, title="Footer", widget=self.__footerLinesWid, help = "Skip the last lines consider as footer.")
+        self.__footerLinesWid = wx.TextCtrl(panel, value=str(self.__footerLines))
+        wid = Widget(parent=panel, title="Footer", widget=self.__footerLinesWid, help = "Skip the last lines consider as footer.")
         loadBoxSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
         self.Bind(wx.EVT_TEXT, self.on_footer_lines, self.__footerLinesWid)
         # create use column
-        self.__useColumnWid = wx.TextCtrl(self.__panel, value=str(self.__useColumn))
-        wid = Widget(parent=self.__panel, title="Data column", widget=self.__useColumnWid, help = "Select the data column to use.")
+        self.__useColumnWid = wx.TextCtrl(panel, value=str(self.__useColumn))
+        wid = Widget(parent=panel, title="Data column", widget=self.__useColumnWid, help = "Select the data column to use. FIRST COLUMN IS 0")
         loadBoxSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
         self.Bind(wx.EVT_TEXT, self.on_use_column, self.__useColumnWid)
-        # create bozSizer
-        sb = wx.StaticBox(self.__panel, label="Analysis parameters")
-        analysisBoxSizer = wx.StaticBoxSizer(sb, wx.VERTICAL)
+        ########################  add all to mainSizer  ########################
+        mainSizer.Add(listCtrlSizer, proportion=1, flag=wx.ALL|wx.EXPAND, border=2)
+        mainSizer.Add(loadBoxSizer, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        panel.SetSizer(mainSizer)
+        ########################  return panel  ########################
+        return panel
+        
+    def build_analysis_parameters_page(self):
+        panel     = wx.Panel(self.__notebook, id=wx.ID_ANY)
+        mainSizer = wx.BoxSizer(wx.VERTICAL)
+        ########################  analysis control  ########################        
         # create filesIntervalWid
-        self.__filesIntervalWid = wx.TextCtrl(self.__panel, value=str(self.__filesInterval ) )
-        wid = Widget(parent=self.__panel, title="Interval", widget=self.__filesIntervalWid, 
+        self.__filesIntervalWid = wx.TextCtrl(panel, value=str(self.__filesInterval ) )
+        wid = Widget(parent=panel, title="Interval", widget=self.__filesIntervalWid, 
                      help = "Set the computation files interval. It must be a positive non-zero integer.\
 The computation will be performed  between every 'interval' files. For instance, when interval is '1',\
 correlation and scedasticity will be computed between successive files,\
 When interval is '2' correlation and scedasticity will be computed between every other file, etc.")
-        analysisBoxSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        mainSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
         self.Bind(wx.EVT_TEXT, self.on_files_interval, self.__filesIntervalWid)
         # create scedasticityWindowSize
-        self.__scedasticityWindowSizeWid = wx.TextCtrl(self.__panel, value=str(self.__scedasticityWindowSize) )
-        wid = Widget(parent=self.__panel, title="Size", widget=self.__scedasticityWindowSizeWid, help = "Set the window size or interval to compute scedasticity. It must be an odd positive integer")
-        analysisBoxSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        self.__scedasticityWindowSizeWid = wx.TextCtrl(panel, value=str(self.__scedasticityWindowSize) )
+        wid = Widget(parent=panel, title="Scedasticity window Size", widget=self.__scedasticityWindowSizeWid, help = "Set the window size or interval to compute scedasticity. It must be an odd positive integer")
+        mainSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
         self.Bind(wx.EVT_TEXT, self.on_scedasticity_window_size, self.__scedasticityWindowSizeWid)
-        # add to sizer
-        mainSizer.Add(loadBoxSizer, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
-        mainSizer.Add(analysisBoxSizer, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
-        sizer.Add(mainSizer, proportion=0, flag=wx.ALL, border=2)
-        # set initial read files parameters as chi
-        self.on_chi_file_parameter(None)
-        
-    def create_menu_bar(self):
+        ########################  add all to mainSizer  ########################
+        panel.SetSizer(mainSizer)
+        ########################  return panel  ########################
+        return panel
+    
+    def build_data_manipulation_page(self):
+        panel     = wx.Panel(self.__notebook, id=wx.ID_ANY)
+        mainSizer = wx.BoxSizer(wx.VERTICAL)
+        ########################  analysis control  ########################        
+        # create useFilesWid
+        self.__useFilesWid = wx.TextCtrl(panel, value=str(""), style=wx.TE_PROCESS_ENTER)
+        wid = Widget(parent=panel, title="Use files", widget=self.__useFilesWid, 
+                     help = "Set the data files range to use. \
+By default, an empty field means all data files are used. \
+Entry can be a real range such as from:to:step (e.g. 0:100:1), \
+or comma separated data indexes (e.g. 0,1,2,100,200,201). \
+HIT ENTER TO VALIDATE")
+        mainSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        self.Bind(wx.EVT_TEXT_ENTER, self.on_use_data_files, self.__useFilesWid)
+        # create ignoreFilesWid
+        self.__ignoreFilesWid = wx.TextCtrl(panel, value=str("") , style=wx.TE_PROCESS_ENTER)
+        wid = Widget(parent=panel, title="Ignore files", widget=self.__ignoreFilesWid, 
+                     help = "Set the data files range to ignore. \
+By default, an empty field means no data files are ignored. \
+Entry can be a real range such as from:to:step (e.g. 0:100:1), \
+or comma separated data indexes (e.g. 0,1,2,100,200,201). \
+HIT ENTER TO VALIDATE")
+        mainSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        self.Bind(wx.EVT_TEXT_ENTER, self.on_ignore_data_files, self.__ignoreFilesWid)
+        # create useDataPointsWid
+        self.__useDataPointsWid = wx.TextCtrl(panel, value=str(""), style=wx.TE_PROCESS_ENTER)
+        wid = Widget(parent=panel, title="Use data points", widget=self.__useDataPointsWid, 
+                     help = "Set the data points range to use. \
+By default, an empty field means all data points are used. \
+Entry can be a real range such as from:to:step (e.g. 0:100:1), \
+or comma separated data indexes (e.g. 0,1,2,100,200,201). \
+HIT ENTER TO VALIDATE")
+        mainSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        self.Bind(wx.EVT_TEXT_ENTER, self.on_use_data_points, self.__useDataPointsWid)
+        # create ignoreDataPoints
+        self.__ignoreDataPointsWid = wx.TextCtrl(panel, value=str("") , style=wx.TE_PROCESS_ENTER)
+        wid = Widget(parent=panel, title="Ignore files", widget=self.__ignoreDataPointsWid, 
+                     help = "Set the data points range to ignore. \
+By default, an empty field means no data points are ignored. \
+Entry can be a real range such as from:to:step (e.g. 0:100:1), \
+or comma separated data indexes (e.g. 0,1,2,100,200,201). \
+HIT ENTER TO VALIDATE")
+        mainSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        self.Bind(wx.EVT_TEXT_ENTER, self.on_ignore_data_points, self.__ignoreDataPointsWid)
+        # create manipulateDataFormula
+        self.__manipulateDataFormulaWid = wx.TextCtrl(panel, value=str("") , style=wx.TE_PROCESS_ENTER)
+        wid = Widget(parent=panel, title="Manipulate", widget=self.__manipulateDataFormulaWid, 
+                     help = "Use formula to manipulate all used data. \
+The given formula will be applied on every data file. \
+Keyword 'dataFile' is used to designate the variable in the formula. \
+All numpy functions are allowed and can be called as np.functionName. \
+By default, an empty field means data are used as is.\n \
+e.g. np.log10(dataFile) # computes the normal log of all data.\n \
+e.g. np.sin(dataFile) # computes the sin function of all data.\n \
+HIT ENTER TO VALIDATE")
+        mainSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        self.Bind(wx.EVT_TEXT_ENTER, self.on_manipulate_data, self.__manipulateDataFormulaWid)
+        ########################  add all to mainSizer  ########################
+        panel.SetSizer(mainSizer)
+        ########################  return panel  ########################
+        return panel
+    
+    def build_menu_bar(self):
         # create menus
         self.__menubar = wx.MenuBar()
         file = wx.Menu()
@@ -559,6 +705,115 @@ When interval is '2' correlation and scedasticity will be computed between every
         self.Bind(wx.EVT_MENU, self.on_about, about) 
         self.Bind(wx.EVT_MENU, self.on_default_dir, defDir)         
     
+    def on_use_data_files(self, event):
+        newStr, val = GET_INDEX_RANGE_FROM_STRING(self.__useFilesWid.GetValue())
+        if newStr is False:
+            newStr = self.__useFiles.keys()[0]
+        else:
+            self.__useFiles = {}
+            self.__useFiles[newStr] = val
+        self.__useFilesWid.ChangeValue(newStr)
+        if val is not False:
+            self.__set_used_data()
+        
+    def on_ignore_data_files(self, event):
+        newStr, val = GET_INDEX_RANGE_FROM_STRING(self.__ignoreFilesWid.GetValue())
+        if newStr is False:
+            newStr = self.__ignoreFiles.keys()[0]
+        else:
+            self.__ignoreFiles = {}
+            self.__ignoreFiles[newStr] = val
+        self.__ignoreFilesWid.ChangeValue(newStr)
+        if val is not False:
+            self.__set_used_data()
+         
+    def on_use_data_points(self, event):
+        newStr, val = GET_INDEX_RANGE_FROM_STRING(self.__useDataPointsWid.GetValue())
+        if newStr is False:
+            newStr = self.__useDataPoints.keys()[0]
+        else:
+            self.__useDataPoints = {}
+            self.__useDataPoints[newStr] = val
+        self.__useDataPointsWid.ChangeValue(newStr)
+        if val is not False:
+            self.__set_used_data()
+        
+    def on_ignore_data_points(self, event):
+        newStr, val = GET_INDEX_RANGE_FROM_STRING(self.__ignoreDataPointsWid.GetValue())
+        if newStr is False:
+            newStr = self.__ignoreDataPoints.keys()[0]
+        else:
+            self.__ignoreDataPoints = {}
+            self.__ignoreDataPoints[newStr] = val
+        self.__ignoreDataPointsWid.ChangeValue(newStr)
+        if val is not False:
+            self.__set_used_data()
+        
+    def on_manipulate_data(self, event):
+        formula = str( self.__manipulateDataFormulaWid.GetValue() ).strip()
+        if not len(formula):
+            self.__manipulateDataFormula = formula    
+            self.__set_used_data()
+        elif "dataFile" not in formula:
+            self.__manipulateDataFormulaWid.ChangeValue(str(self.__manipulateDataFormula))
+            dlg = wx.MessageDialog(self, "Use formula to manipulate all used data. \
+The given formula will be applied on every data file. \
+Keyword 'dataFile' is used to designate the variable in the formula. \
+All numpy functions are allowed and can be called as np.functionName. \
+By default, an empty field means data are used as is.\n \
+e.g. np.log10(dataFile) # computes the normal log of all data.\n \
+e.g. np.sin(dataFile) # computes the sin function of all data.", 
+            "dataFile keyword not found", wx.OK|wx.ICON_WARNING)
+            result = dlg.ShowModal()
+            dlg.Destroy()
+        else:
+            dataFile = np.arange(0,10,0.1)
+            try:
+                res = eval(formula)
+                assert res.shape == dataFile.shape
+            except:
+                self.__manipulateDataFormulaWid.ChangeValue(str(self.__manipulateDataFormula))
+            else:
+                self.__manipulateDataFormula = formula    
+                self.__set_used_data()
+            
+    def __set_used_data(self):
+        self.initialize_analysis_data()
+        if self.__allData is None:
+            self.__dataUsed = None
+            return
+        # set dataUsed
+        npoints = len(self.__allData[0])
+        ndata   = len(self.__allData)
+        # get used data
+        if self.__useFiles.values()[0] is None:
+            useFiles = set(range(ndata))
+        else:
+            useFiles = set(self.__useFiles.values()[0])
+        if self.__ignoreFiles.values()[0] is None:
+            ignoreFiles = set([])
+        else:
+            ignoreFiles = set(self.__ignoreFiles.values()[0])
+        useFiles = sorted(useFiles-ignoreFiles)
+        data = [self.__allData[idx] for idx in useFiles if idx<ndata]
+        # get used points
+        if self.__useDataPoints.values()[0] is None:
+            usePoints = set(range(npoints))
+        else:
+            usePoints = set(self.__useDataPoints.values()[0])
+        if self.__ignoreDataPoints.values()[0] is None:
+            ignorePoints = set([])
+        else:
+            ignorePoints = set(self.__ignoreDataPoints.values()[0])
+        useFiles = np.array([idx for idx in sorted(usePoints-ignorePoints) if idx < npoints], dtype=np.int)
+        # apply formula
+        if len(self.__manipulateDataFormula):
+            self.__dataUsed = []
+            for dataFile in data:
+                self.__dataUsed.append( eval(self.__manipulateDataFormula) )  
+        else:
+            self.__dataUsed = [d[useFiles] for d in data]  
+        
     def on_default_dir(self, event):
         dialog = wx.DirDialog (None, 
                                message = "Choose default directory",
@@ -701,8 +956,7 @@ When interval is '2' correlation and scedasticity will be computed between every
         else:
             self.__filesInterval = val
             # reset calculations
-            self.__correlation   = None
-            self.__scedasticity  = None
+            self.initialize_analysis_data()
             
     def on_move_down(self, event):
         selected = self.__filesWid.GetSelections()
@@ -806,15 +1060,17 @@ When interval is '2' correlation and scedasticity will be computed between every
             count += 1
             self.__progressBar.SetValue(count)
         # cast vectors length
-        self.__data = [d[:vectLen] for d in data]
+        self.__allData  = [d[:vectLen] for d in data]
+        self.__set_used_data()
         # reset calculations
-        self.__correlation = None
-        self.__scedasticity = None
+        self.initialize_analysis_data()
+        # reset data manipulation
+        self.initialize_data_manipulation()
         # reset progress bar
         self.__progressBar.SetValue(len(self.__files))    
             
     def on_plot_data(self, event):
-        if not len(self.__data):
+        if not len(self.__dataUsed):
             warnings.warn("must load data first.")
             dlg = wx.MessageDialog(self, "must load data first.",
                   "No data found", wx.OK|wx.ICON_WARNING)
@@ -822,7 +1078,7 @@ When interval is '2' correlation and scedasticity will be computed between every
             dlg.Destroy()
             return
         # vertical stack data
-        data = np.vstack(self.__data)
+        data = np.vstack(self.__dataUsed)
         # plot data
         plot = PlotFigure(parent=self, title="raw data",
                           plotTitle = "raw data",
@@ -831,14 +1087,14 @@ When interval is '2' correlation and scedasticity will be computed between every
         plot.Show()
     
     def on_compute_correlation(self, event):
-        if not len(self.__data):
+        if not len(self.__dataUsed):
             warnings.warn("must load data first.")
             dlg = wx.MessageDialog(self, "must load data first.",
                   "No data found", wx.OK|wx.ICON_WARNING)
             result = dlg.ShowModal()
             dlg.Destroy()
             return
-        if len(self.__data) <= 1:
+        if len(self.__dataUsed) <= 1:
             warnings.warn("At least two data set must be loaded")
             dlg = wx.MessageDialog(self, "At least two data set must be loaded.",
                   "Not enough data found", wx.OK|wx.ICON_WARNING)
@@ -848,10 +1104,10 @@ When interval is '2' correlation and scedasticity will be computed between every
         if self.__correlation is None:
             correlation = []
             self.__progressBar.SetValue(0)  
-            self.__progressBar.SetRange(len(self.__data)-1)
-            for idx in range(0,len(self.__data)-1, self.__filesInterval):
-                y0 = self.__data[idx]
-                y1 = self.__data[idx+1]
+            self.__progressBar.SetRange(len(self.__dataUsed)-1)
+            for idx in range(0,len(self.__dataUsed)-1, self.__filesInterval):
+                y0 = self.__dataUsed[idx]
+                y1 = self.__dataUsed[idx+1]
                 # create correlation vector
                 y0mean = np.mean(y0)
                 y1mean = np.mean(y1)
@@ -864,7 +1120,7 @@ When interval is '2' correlation and scedasticity will be computed between every
                 self.__progressBar.SetValue(idx+1)
             self.__correlation = np.array(correlation)
         # reset progress bar
-        self.__progressBar.SetValue(len(self.__data)-1)  
+        self.__progressBar.SetValue(len(self.__dataUsed)-1)  
         # plot data
         plot = PlotFigure(parent=self, title="correlation", plotTitle="correlation interval %i"%self.__filesInterval)
         plot.plot_vector(self.__correlation)
@@ -884,7 +1140,7 @@ When interval is '2' correlation and scedasticity will be computed between every
         return corr
         
     def on_compute_scedasticity(self, event):
-        if not len(self.__data):
+        if not len(self.__dataUsed):
             warnings.warn("must load data first.")
             dlg = wx.MessageDialog(self, "must load data first.",
                   "No data found", wx.OK|wx.ICON_WARNING)
@@ -892,20 +1148,20 @@ When interval is '2' correlation and scedasticity will be computed between every
             dlg.Destroy()
             return
         windowSize=float(self.__scedasticityWindowSize)
-        assert windowSize<=len(self.__data[0]), "scedasticity size cannot be bigger than the data size"
+        assert windowSize<=len(self.__dataUsed[0]), "scedasticity size cannot be bigger than the data size"
         halfwindow = int(windowSize/2)
         if self.__scedasticity is None:
             correlation = []
             self.__progressBar.SetValue(0)  
-            self.__progressBar.SetRange(len(self.__data)-self.__filesInterval)
-            for idx in range(0, len(self.__data)-self.__filesInterval): 
-                y0 = self.__data[idx]
-                y1 = self.__data[idx+self.__filesInterval] 
+            self.__progressBar.SetRange(len(self.__dataUsed)-self.__filesInterval)
+            for idx in range(0, len(self.__dataUsed)-self.__filesInterval): 
+                y0 = self.__dataUsed[idx]
+                y1 = self.__dataUsed[idx+self.__filesInterval] 
                 correlation.append(self.__get_scedasticity_correlation(y0,y1, halfwindow))
                 # update bar
                 self.__progressBar.SetValue(idx+1)
             # reset progress bar
-            self.__progressBar.SetValue(len(self.__data)-self.__filesInterval)  
+            self.__progressBar.SetValue(len(self.__dataUsed)-self.__filesInterval)  
             self.__scedasticity = np.vstack(correlation)
         # vertical stack data
         data = np.array( self.__scedasticity )
@@ -949,11 +1205,6 @@ When interval is '2' correlation and scedasticity will be computed between every
 class MyApp(wx.App):
     def OnInit(self):
         frame = MainFrame(None, -1, 'Ranked data analysis ( B. Aoun et al )')
-        # populate files automatically
-        #path = "C:\\Users\\aoun\\Documents\\collaboration\\zonghai\\diffraction_11IDC_10APR2014\\mixed"
-        #files = [os.path.join(path,fn) for fn in next(os.walk(path))[2] if ".chi" in fn]
-        #frame.populate_files([files[idx] for idx in range(0, len(files), 3)])
-        #frame.on_chi_file_parameter(None)
         frame.Show(True)
         return True
 
