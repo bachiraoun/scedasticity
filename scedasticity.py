@@ -317,7 +317,7 @@ class PlotFigure(wx.Dialog):
     
     def compare_vectors(self, data, labels,
                               axis='on',  
-                              xLabel="number or files", yLabel="correlation",
+                              xLabel="number or points", yLabel="intensity",
                               ticksDirection="out"):
         self.__usedData = data
         self.__labels   = labels
@@ -986,8 +986,7 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
         # set plot options enabled
         self.__compareSelectedDataBut.Enable(not self.__matrixFile)
         self.__plotSelectedDataBut.Enable(not self.__matrixFile)
-        
-        
+            
     def on_browse_files(self, event):
         # create browsing dialog
         wildcard = "All files (*.*)|*.*|"+\
@@ -1028,7 +1027,7 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
         # update widget
         self.__filesWid.Clear()
         # update files
-        [self.__filesWid.Insert(self.__files[idx], idx) for idx in range(len(self.__files))]
+        [self.__filesWid.Insert("%i --> "%idx+str(self.__files[idx]), idx) for idx in range(len(self.__files))]
         # enable buttons
         self.__LoadData.Enable(len(self.__files))
         self.__invertFilesWid.Enable(len(self.__files))
@@ -1145,11 +1144,15 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
         newSelection = []
         for idx in reversed(selected):
             filePath = self.__files.pop(idx)
-            self.__filesWid.Delete(idx)
+            #self.__filesWid.Delete(idx)
             self.__files.insert(idx+1, filePath)
-            self.__filesWid.Insert(filePath, idx+1)
-            self.__filesWid.SetSelection(idx+1, True)
+            #self.__filesWid.Insert(filePath, idx+1)
+            #self.__filesWid.SetSelection(idx+1, True)
             newSelection.append(idx+1)
+        # repopulate files
+        self.populate_files(self.__files)
+        for idx in reversed(newSelection):
+            self.__filesWid.SetSelection(idx)
         # set enables
         self.__moveDownWid.Enable(not  newSelection[-1] == len(self.__files)-1)
         self.__moveUpWid.Enable(not newSelection[0] == 0)
@@ -1169,11 +1172,15 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
         newSelection = []
         for idx in selected:
             filePath = self.__files.pop(idx)
-            self.__filesWid.Delete(idx)
+            #self.__filesWid.Delete(idx)
             self.__files.insert(idx-1, filePath)
-            self.__filesWid.Insert(filePath, idx-1)
-            self.__filesWid.SetSelection(idx-1, True)
+            #self.__filesWid.Insert(filePath, idx-1)
+            #self.__filesWid.SetSelection(idx-1, True)
             newSelection.append(idx-1)
+        # repopulate files
+        self.populate_files(self.__files)
+        for idx in reversed(newSelection):
+            self.__filesWid.SetSelection(idx)
         # set enables
         self.__moveDownWid.Enable(not  newSelection[-1] == len(self.__files)-1)
         self.__moveUpWid.Enable(not newSelection[0] == 0)
@@ -1310,9 +1317,9 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
             dlg.Destroy()
             return
         selected = sorted(self.__filesWid.GetSelections())
-        if not len(selected):
-            warnings.warn("must select data files first.")
-            dlg = wx.MessageDialog(self, "must select data files first.",
+        if len(selected) <= 1:
+            warnings.warn("must select multiple data files.")
+            dlg = wx.MessageDialog(self, "must select multiple data files.",
                   "No selection found", wx.OK|wx.ICON_WARNING)
             result = dlg.ShowModal()
             dlg.Destroy()
@@ -1483,7 +1490,6 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
 class MyApp(wx.App):
     def OnInit(self):
         frame = MainFrame(None, -1, 'Ranked data analysis ( B. Aoun et al )')
-        frame.Show(True)
         return True
 
 app = MyApp(0)
