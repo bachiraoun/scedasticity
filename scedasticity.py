@@ -191,7 +191,7 @@ class FloatSlider(wx.Slider):
 
         
 class PlotFigure(wx.Dialog):
-    def __init__(self, parent=None, title="plot", plotTitle='', mapOptions=False):
+    def __init__(self, parent=None, title="plot", plotTitle='', mapOptions=False, compareOptions=False):
         wx.Dialog.__init__(self, parent=parent, title=title, style=wx.DEFAULT_DIALOG_STYLE|wx.RESIZE_BORDER|wx.MAXIMIZE_BOX|wx.MINIMIZE_BOX)
         self.__sizer = wx.BoxSizer(wx.VERTICAL)
         toolbarSizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -201,7 +201,11 @@ class PlotFigure(wx.Dialog):
         self.__allData  = None
         self.__usedData = None
         self.__image    = None
-        self.__vector   = None
+        self.__vector   = None 
+        # offset variables
+        self.__labels        = []
+        self.__offsetMaximum = 1
+        self.__offsetPercent = 0
         # create figure, axes and canvas
         self.__figure = Figure()
         self.__axes = self.__figure.add_subplot(111)
@@ -227,9 +231,49 @@ class PlotFigure(wx.Dialog):
         # add map options
         if mapOptions:
             self.create_map_panel()
+        # add compare options
+        if compareOptions:
+            self.create_compare_panel()
         # set sizer 
         self.SetSizer(self.__sizer)
         self.Fit()
+    
+    def create_map_panel(self):
+        vSizer = wx.BoxSizer(wx.VERTICAL)   
+        # add colormap
+        maps = sorted(m for m in plt.cm.datad if not m.endswith("_r"))
+        self.__cmps = wx.Choice(self, id=-1, choices=maps)
+        wid = Widget(parent=self, title="Colormap", widget=self.__cmps, help = "Set the image colormap")
+        vSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2) 
+        # min value
+        self.__minValueSlider = wx.Slider(self, id=-1, value=0, minValue=0, maxValue=self.__sliderMax ,style=wx.SL_HORIZONTAL)
+        wid = Widget(parent=self, title="Minimum value", widget=self.__minValueSlider, help = "Set the minimum clipping value of data.")
+        vSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        # max value
+        self.__maxValueSlider =  wx.Slider(self, id=-1, value=self.__sliderMax, minValue=0, maxValue=self.__sliderMax ,style=wx.SL_HORIZONTAL)
+        wid = Widget(parent=self, title="Maximum value", widget=self.__maxValueSlider, help = "Set the maximum clipping value of data.")
+        vSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        # events
+        self.Bind(wx.EVT_SCROLL, self.on_min_value_slider, self.__minValueSlider)
+        self.Bind(wx.EVT_SCROLL, self.on_max_value_slider, self.__maxValueSlider)
+        self.Bind(wx.EVT_CHOICE, self.on_colormap, self.__cmps)
+        # add to sizer
+        self.__sizer.Add(vSizer, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+    
+    def create_compare_panel(self):
+        vSizer = wx.BoxSizer(wx.VERTICAL) 
+        # max value
+        self.__offsetMaximumWid= wx.TextCtrl(self, id=-1, value=str(self.__offsetMaximum))
+        wid = Widget(parent=self, title="Offset maximum", widget=self.__offsetMaximumWid, help = "Set the maximum offset allowed.")
+        vSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        self.__offsetPercentWid =  wx.Slider(self, id=-1, value=self.__offsetPercent, minValue=0, maxValue=self.__sliderMax ,style=wx.SL_HORIZONTAL)
+        wid = Widget(parent=self, title="Maximum value", widget=self.__offsetPercentWid, help = "Set the maximum clipping value of data.")
+        vSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)     
+        # events
+        self.Bind(wx.EVT_TEXT, self.on_maximum_offset, self.__offsetMaximumWid)
+        self.Bind(wx.EVT_SCROLL, self.on_offset_slider_percent, self.__offsetPercentWid)
+        # add to sizer
+        self.__sizer.Add(vSizer, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
         
     def draw(self, drawDC=None):
         FigureCanvas.draw(self.__canvas, drawDC=drawDC)
@@ -257,18 +301,37 @@ class PlotFigure(wx.Dialog):
                    footer='', 
                    comments='# ')
         
-
     def plot_vector(self, data,
                           axis='on',
                           xLabel="number or files", yLabel="correlation",
                           ticksDirection="out"):
-        self.__usedData   = data
-        self.__vector = self.__axes.plot(data)
+        self.__usedData = data
+        while self.__axes.lines:
+            self.__axes.lines.pop(0)
+        self.__vector   = self.__axes.plot(data)
         self.__axes.axis(axis)
         self.__axes.set_xlabel(xLabel)
         self.__axes.set_ylabel(yLabel)
         self.__axes.get_yaxis().set_tick_params(direction=ticksDirection)
         self.__axes.get_xaxis().set_tick_params(direction=ticksDirection)
+    
+    def compare_vectors(self, data, labels,
+                              axis='on',  
+                              xLabel="number or files", yLabel="correlation",
+                              ticksDirection="out"):
+        self.__usedData = data
+        self.__labels   = labels
+        while self.__axes.lines:
+            self.__axes.lines.pop(0)
+        for idx in range(len(self.__usedData)):
+            d = self.__usedData[idx]+ idx*(self.__offsetMaximum*self.__offsetPercent/100.) 
+            self.__axes.plot(d, label=self.__labels[idx])
+        self.__axes.axis(axis)
+        self.__axes.set_xlabel(xLabel)
+        self.__axes.set_ylabel(yLabel)
+        self.__axes.get_yaxis().set_tick_params(direction=ticksDirection)
+        self.__axes.get_xaxis().set_tick_params(direction=ticksDirection)
+        self.__axes.legend(ncol = int(len(self.__labels)/10.)+1)
         
     def plot_image(self, data, extent=(0,100,0,100), colormap="jet",
                          axis='on', origin="lower",
@@ -304,29 +367,28 @@ class PlotFigure(wx.Dialog):
         self.__image.set_cmap(colormap)
         #FigureCanvasBase.draw(self.__canvas)
         self.__canvas.draw()
-        
-    def create_map_panel(self):
-        vSizer = wx.BoxSizer(wx.VERTICAL)   
-        # add colormap
-        maps = sorted(m for m in plt.cm.datad if not m.endswith("_r"))
-        self.__cmps = wx.Choice(self, id=-1, choices=maps)
-        wid = Widget(parent=self, title="Colormap", widget=self.__cmps, help = "Set the image colormap")
-        vSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2) 
-        # min value
-        self.__minValueSlider = wx.Slider(self, id=-1, value=0, minValue=0, maxValue=self.__sliderMax ,style=wx.SL_HORIZONTAL)
-        wid = Widget(parent=self, title="Minimum value", widget=self.__minValueSlider, help = "Set the minimum clipping value of data.")
-        vSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
-        # max value
-        self.__maxValueSlider =  wx.Slider(self, id=-1, value=self.__sliderMax, minValue=0, maxValue=self.__sliderMax ,style=wx.SL_HORIZONTAL)
-        wid = Widget(parent=self, title="Maximum value", widget=self.__maxValueSlider, help = "Set the maximum clipping value of data.")
-        vSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
-        # events
-        self.Bind(wx.EVT_SCROLL, self.on_min_value_slider, self.__minValueSlider)
-        self.Bind(wx.EVT_SCROLL, self.on_max_value_slider, self.__maxValueSlider)
-        self.Bind(wx.EVT_CHOICE, self.on_colormap, self.__cmps)
-        # add to sizer
-        self.__sizer.Add(vSizer, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+
+    def on_maximum_offset(self, event):
+        try:
+            val = event.GetEventObject().GetValue()
+            val = float(val) 
+        except:
+            val = None            
+        if val<0:
+            val = None
+        if val is None:
+            event.GetEventObject().ChangeValue(str(self.__offsetMaximum))   
+        else:            
+            self.__offsetMaximum = val
+        # compare data
+        self.compare_vectors(self.__usedData, labels=self.__labels )
+        self.__canvas.draw()
     
+    def on_offset_slider_percent(self, event):
+        self.__offsetPercent = float(self.__offsetPercentWid.GetValue())
+        self.compare_vectors(self.__usedData, labels=self.__labels )
+        self.__canvas.draw()
+             
     def on_colormap(self, event):
         cmap = self.__cmps.GetString(self.__cmps.GetSelection())
         self.set_colormap( cmap )
@@ -406,7 +468,6 @@ class About(wx.Dialog):
         # create scedasticity formula image
         scedasticityIm = wx.StaticBitmap(self)
         scedasticityIm.SetBitmap(wx.Bitmap('scedasticity_formula.PNG'))
-        
         description = "This software is about a generalized method used to extract \
 critical information from series of ranked correlated data. \
 The method is generally applicable to all types of spectra evolving \
@@ -444,7 +505,8 @@ class MainFrame(wx.Frame):
         wx.Frame.__init__(self, parent, id, title, wx.DefaultPosition, wx.Size(900, 500))
         self.SetIcon(wx.Icon('scedasticity16X16.PNG',wx.BITMAP_TYPE_PNG, 16,16))
         # initialize variables
-        self.__files        = []
+        self.__files      = []
+        self.__matrixFile = None
         # initialize data
         self.__allData  = []
         self.__usedData = []
@@ -512,13 +574,22 @@ class MainFrame(wx.Frame):
         sb = wx.StaticBox(self.__panel, label="Available actions")
         horizontalSizer = wx.StaticBoxSizer(sb, wx.HORIZONTAL)
         # create actions
-        plotData = wx.Button(self.__panel, -1, label="Plot data")
-        self.Bind(wx.EVT_BUTTON, self.on_plot_data, plotData)
+        self.__plotSelectedDataBut = wx.Button(self.__panel, -1, label="Plot selected files")
+        self.Bind(wx.EVT_BUTTON, self.on_plot_selected_data, self.__plotSelectedDataBut)
+        self.__plotSelectedDataBut.SetToolTip( wx.ToolTip("Plot an image of selected files.") )
+        self.__plotAllDataBut = wx.Button(self.__panel, -1, label="Plot all data")
+        self.Bind(wx.EVT_BUTTON, self.on_plot_data, self.__plotAllDataBut)
+        self.__plotAllDataBut.SetToolTip( wx.ToolTip("Plot an image of all files.") )
+        self.__compareSelectedDataBut = wx.Button(self.__panel, -1, label="Compare selected files")
+        self.Bind(wx.EVT_BUTTON, self.on_compare_selected_data, self.__compareSelectedDataBut)
+        self.__compareSelectedDataBut.SetToolTip( wx.ToolTip("Plot selected files as lines.") )
         correlation = wx.Button(self.__panel, -1, label="Correlation")
         self.Bind(wx.EVT_BUTTON, self.on_compute_correlation, correlation)
         scedasticity = wx.Button(self.__panel, -1, label="Scedasticity")
         self.Bind(wx.EVT_BUTTON, self.on_compute_scedasticity, scedasticity)
-        horizontalSizer.Add(plotData, proportion=0, flag=wx.ALL, border=2)
+        horizontalSizer.Add(self.__plotSelectedDataBut, proportion=0, flag=wx.ALL, border=2)
+        horizontalSizer.Add(self.__compareSelectedDataBut, proportion=0, flag=wx.ALL, border=2)
+        horizontalSizer.Add(self.__plotAllDataBut, proportion=0, flag=wx.ALL, border=2)
         horizontalSizer.Add(correlation, proportion=0, flag=wx.ALL, border=2)
         horizontalSizer.Add(scedasticity, proportion=0, flag=wx.ALL, border=2)
         # add to sizer
@@ -536,36 +607,36 @@ class MainFrame(wx.Frame):
         listCtrlSizer.Add(self.__filesWid, proportion=1, flag=wx.ALL|wx.EXPAND, border=2)
         self.Bind(wx.EVT_LISTBOX, self.on_files_selection, self.__filesWid)
         # create actions
-        self.__moveUp = wx.Button(panel, -1, label="Move up")
-        self.Bind(wx.EVT_BUTTON, self.on_move_up, self.__moveUp)
-        self.__moveDown = wx.Button(panel, -1, label="Move down")
-        self.Bind(wx.EVT_BUTTON, self.on_move_down, self.__moveDown)
-        self.__invertFilesList = wx.Button(panel, -1, label="Invert")
-        self.Bind(wx.EVT_BUTTON, self.on_invert_order, self.__invertFilesList)
-        self.__discardFile = wx.Button(panel, -1, label="Discard")
-        self.Bind(wx.EVT_BUTTON, self.on_discard_down, self.__discardFile)
+        self.__moveUpWid = wx.Button(panel, -1, label="Move up")
+        self.Bind(wx.EVT_BUTTON, self.on_move_up, self.__moveUpWid)
+        self.__moveDownWid = wx.Button(panel, -1, label="Move down")
+        self.Bind(wx.EVT_BUTTON, self.on_move_down, self.__moveDownWid)
+        self.__invertFilesWid = wx.Button(panel, -1, label="Invert")
+        self.Bind(wx.EVT_BUTTON, self.on_invert_order, self.__invertFilesWid)
+        self.__discardFileWid = wx.Button(panel, -1, label="Discard")
+        self.Bind(wx.EVT_BUTTON, self.on_discard_down, self.__discardFileWid)
         #listCtrlButtSizer.AddSpacer(10)
         self.__LoadData = wx.Button(panel, -1, label="Load")
         self.Bind(wx.EVT_BUTTON, self.on_load_data, self.__LoadData)
         # add to listCtrlButtSizer
-        listCtrlButtSizer.Add(self.__moveUp, proportion=1, flag=wx.ALL, border=2)
-        listCtrlButtSizer.Add(self.__moveDown, proportion=1, flag=wx.ALL, border=2)
-        listCtrlButtSizer.Add(self.__invertFilesList, proportion=1, flag=wx.ALL, border=2)
-        listCtrlButtSizer.Add(self.__discardFile, proportion=1, flag=wx.ALL, border=2)
+        listCtrlButtSizer.Add(self.__moveUpWid, proportion=1, flag=wx.ALL, border=2)
+        listCtrlButtSizer.Add(self.__moveDownWid, proportion=1, flag=wx.ALL, border=2)
+        listCtrlButtSizer.Add(self.__invertFilesWid, proportion=1, flag=wx.ALL, border=2)
+        listCtrlButtSizer.Add(self.__discardFileWid, proportion=1, flag=wx.ALL, border=2)
         listCtrlButtSizer.Add(self.__LoadData, proportion=1, flag=wx.ALL, border=2)
         # add listCtrlButtSizer
         listCtrlSizer.Add(listCtrlButtSizer, proportion=0, flag=wx.ALL|wx.ALIGN_RIGHT, border=2)
         # dis-activate all buttons
-        self.__moveUp.Enable(False)
-        self.__moveDown.Enable(False)
-        self.__invertFilesList.Enable(False)
-        self.__discardFile.Enable(False)
+        self.__moveUpWid.Enable(False)
+        self.__moveDownWid.Enable(False)
+        self.__invertFilesWid.Enable(False)
+        self.__discardFileWid.Enable(False)
         self.__LoadData.Enable(False)
         # set help
-        self.__moveUp.SetToolTip( wx.ToolTip("Move UP selected files in the list.") )
-        self.__moveDown.SetToolTip( wx.ToolTip("Move DOWN selected files in the list.") )
-        self.__invertFilesList.SetToolTip( wx.ToolTip("Invert up side down all files order in the list regardless of selection.") )
-        self.__discardFile.SetToolTip( wx.ToolTip("Remove file from list.") )
+        self.__moveUpWid.SetToolTip( wx.ToolTip("Move UP selected files in the list.") )
+        self.__moveDownWid.SetToolTip( wx.ToolTip("Move DOWN selected files in the list.") )
+        self.__invertFilesWid.SetToolTip( wx.ToolTip("Invert up side down all files order in the list regardless of selection.") )
+        self.__discardFileWid.SetToolTip( wx.ToolTip("Remove file from list.") )
         self.__LoadData.SetToolTip( wx.ToolTip("Load all files in list regardless of selection.") )
         ########################  reading parameters  ########################
         sb = wx.StaticBox(panel, label="Read files parameters")
@@ -692,7 +763,8 @@ HIT ENTER TO VALIDATE")
         self.__menubar = wx.MenuBar()
         file = wx.Menu()
         #about = wx.Menu()
-        browse = file.Append(-1, '&Browse', 'Browse data files')
+        browseFiles = file.Append(-1, '&Browse files', 'Browse data files.')
+        browseMatrix = file.Append(-1, '&Browse matrix', 'Browse matrix file containing N rows and M columns.')
         file.AppendSeparator()
         filesParameters = wx.Menu()
         file.AppendMenu(-1, '&Files parameters', filesParameters)
@@ -713,7 +785,8 @@ HIT ENTER TO VALIDATE")
         self.SetMenuBar(self.__menubar)
         self.CreateStatusBar()
         # bind menus
-        self.Bind(wx.EVT_MENU, self.on_browse, browse)
+        self.Bind(wx.EVT_MENU, self.on_browse_files, browseFiles)
+        self.Bind(wx.EVT_MENU, self.on_browse_matrix, browseMatrix)
         self.Bind(wx.EVT_MENU, self.on_quit, quit) 
         self.Bind(wx.EVT_MENU, self.on_chi_file_parameter, chiParams)      
         self.Bind(wx.EVT_MENU, self.on_gr_file_parameter, grParams)   
@@ -882,12 +955,47 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
             
     def on_about(self, event):
         About().ShowModal()
+    
+    def on_browse_matrix(self, event):
+        # create browsing dialog
+        wildcard = "All files (*.*)|*.*|"+\
+                   "data files (*.dat)|*.dat|"+\
+                   "text files (*.txt)|*.txt"           
+        dialog = wx.FileDialog(None, message="Browse files", 
+                                     defaultDir=DEFAULT_DIR, 
+                                     defaultFile="", 
+                                     wildcard=wildcard,
+                                     style=wx.OPEN)
+        returned = dialog.ShowModal() 
+        globals()["DEFAULT_DIR"] = dialog.GetDirectory()
+        dialog.Destroy()
+        if returned == wx.ID_OK:
+            files = [os.path.normpath(str(p)) for p in dialog.GetPaths()]
+        else:
+            return
+        # update widget
+        self.populate_files(files)
+        # Set active
+        self.__commentWid.Enable(True)
+        self.__delimiterWid.Enable(True)
+        self.__headerLinesWid.Enable(True)
+        self.__footerLinesWid.Enable(True)
+        self.__useColumnWid.Enable(False)
+        # set matrixFile flag
+        self.__matrixFile = True
+        # set plot options enabled
+        self.__compareSelectedDataBut.Enable(not self.__matrixFile)
+        self.__plotSelectedDataBut.Enable(not self.__matrixFile)
         
-    def on_browse(self, event):
-        wildcard = "Chi files (*.chi)|*.chi|"+\
+        
+    def on_browse_files(self, event):
+        # create browsing dialog
+        wildcard = "All files (*.*)|*.*|"+\
+                   "Chi files (*.chi)|*.chi|"+\
                    "gr files (*.gr)|*.gr|"+\
                    "sq files (*.sq)|*.sq|"+\
-                   "All files (*.*)|*.*"
+                   "data files (*.dat)|*.dat|"+\
+                   "text files (*.txt)|*.txt"           
         dialog = wx.FileDialog(None, message="Browse files", 
                                      defaultDir=DEFAULT_DIR, 
                                      defaultFile="", 
@@ -902,30 +1010,41 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
             return
         # update widget
         self.populate_files(files)
+        # Set active
+        self.__commentWid.Enable(True)
+        self.__delimiterWid.Enable(True)
+        self.__headerLinesWid.Enable(True)
+        self.__footerLinesWid.Enable(True)
+        self.__useColumnWid.Enable(True)
+        # set matrixFile flag
+        self.__matrixFile = False
+        # set plot options enabled
+        self.__compareSelectedDataBut.Enable(not self.__matrixFile)
+        self.__plotSelectedDataBut.Enable(not self.__matrixFile)
     
     def populate_files(self, files):
         # check files
-        self.__files    = [f for f in files if os.path.isfile(f) and os.access(f, os.R_OK)]
+        self.__files = [f for f in files if os.path.isfile(f) and os.access(f, os.R_OK)]
         # update widget
         self.__filesWid.Clear()
         # update files
         [self.__filesWid.Insert(self.__files[idx], idx) for idx in range(len(self.__files))]
         # enable buttons
         self.__LoadData.Enable(len(self.__files))
-        self.__invertFilesList.Enable(len(self.__files))
-        self.__invertFilesList.Enable(len(self.__files))
+        self.__invertFilesWid.Enable(len(self.__files))
+        self.__invertFilesWid.Enable(len(self.__files))
         
     def on_files_selection(self, event):
         # get selection
         selected = sorted( self.__filesWid.GetSelections() )
         # enable buttons
-        self.__discardFile.Enable(len(selected))
+        self.__discardFileWid.Enable(len(selected))
         if not len(selected):
-            self.__moveUp.Enable(False)
-            self.__moveDown.Enable(False)
+            self.__moveUpWid.Enable(False)
+            self.__moveDownWid.Enable(False)
         else:
-            self.__moveUp.Enable(selected[0]>0)
-            self.__moveDown.Enable(selected[-1]<len(self.__files)-1)
+            self.__moveUpWid.Enable(selected[0]>0)
+            self.__moveDownWid.Enable(selected[-1]<len(self.__files)-1)
                 
     def on_quit(self, event):
         exit()
@@ -1016,11 +1135,11 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
         if not len(selected):
             return
         if selected[0] == 0:
-            self.__moveUp.Enable(False)
+            self.__moveUpWid.Enable(False)
         else:
-            self.__moveUp.Enable(True)
+            self.__moveUpWid.Enable(True)
         if selected[-1] == len(self.__files)-1:
-            self.__moveDown.Enable(False)
+            self.__moveDownWid.Enable(False)
             return
         # move selected
         newSelection = []
@@ -1032,19 +1151,19 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
             self.__filesWid.SetSelection(idx+1, True)
             newSelection.append(idx+1)
         # set enables
-        self.__moveDown.Enable(not  newSelection[-1] == len(self.__files)-1)
-        self.__moveUp.Enable(not newSelection[0] == 0)
+        self.__moveDownWid.Enable(not  newSelection[-1] == len(self.__files)-1)
+        self.__moveUpWid.Enable(not newSelection[0] == 0)
   
     def on_move_up(self, event):
         selected = self.__filesWid.GetSelections()   
         if not len(selected):
             return
         if selected[-1] == len(self.__files)-1:
-            self.__moveDown.Enable(False)
+            self.__moveDownWid.Enable(False)
         else:
-            self.__moveDown.Enable(True)
+            self.__moveDownWid.Enable(True)
         if selected[0] == 0:
-            self.__moveUp.Enable(False)
+            self.__moveUpWid.Enable(False)
             return
         # move selected
         newSelection = []
@@ -1056,8 +1175,8 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
             self.__filesWid.SetSelection(idx-1, True)
             newSelection.append(idx-1)
         # set enables
-        self.__moveDown.Enable(not  newSelection[-1] == len(self.__files)-1)
-        self.__moveUp.Enable(not newSelection[0] == 0)
+        self.__moveDownWid.Enable(not  newSelection[-1] == len(self.__files)-1)
+        self.__moveUpWid.Enable(not newSelection[0] == 0)
             
     def on_invert_order(self, event):
         # get selected files to select back
@@ -1093,27 +1212,55 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
         self.__progressBar.SetValue(0) 
         self.__progressBar.SetRange(len(self.__files))
         vectLen = None
-        for f in self.__files:
+        unreadFiles = []
+        # load single matrix file
+        if self.__matrixFile:
             try:
-                d = np.genfromtxt(f, dtype    = np.float32,
-                                  comments    = self.__comment, 
-                                  delimiter   = self.__delimiter, 
-                                  skip_header = self.__headerLines,
-                                  skip_footer = self.__footerLines,
-                                  usecols     = self.__useColumn)
+                f = self.__files[0]
+                d = np.genfromtxt(f, dtype = np.float32,
+                                   comments    = self.__comment, 
+                                   delimiter   = self.__delimiter, 
+                                   skip_header = self.__headerLines,
+                                   skip_footer = self.__footerLines)
+                assert len(d.shape) == 2, "matrix should have N lines and M columns"
             except Exception as e:
+                unreadFiles.append(f)
                 warnings.warn("file %s can't be read. %s"%(f,e))
             else:
-                if vectLen is None:
-                    vectLen = len(d)
-                elif vectLen != len(d):
-                    warnings.warn("file %s length is found to be different than the rest of files"%(f))
-                data.append(d)
-            # update progress    
-            count += 1
-            self.__progressBar.SetValue(count)
-        # cast vectors length
-        self.__allData  = [d[:vectLen] for d in data]
+                # cast vectors length
+                self.__allData  = [d[idx,:] for idx in range(d.shape[0])]
+        # load vector files
+        else:
+            for f in self.__files:
+                try:
+                    d = np.genfromtxt(f, dtype    = np.float32,
+                                      comments    = self.__comment, 
+                                      delimiter   = self.__delimiter, 
+                                      skip_header = self.__headerLines,
+                                      skip_footer = self.__footerLines,
+                                      usecols     = self.__useColumn)
+                    assert len(d), "file must have data"
+                except Exception as e:
+                    unreadFiles.append(f)
+                    warnings.warn("file %s can't be read. %s"%(f,e))
+                else:
+                    if vectLen is None:
+                        vectLen = len(d)
+                    elif vectLen != len(d):
+                        warnings.warn("file %s length is found to be different than the rest of files"%(f))
+                    data.append(d)
+                # update progress    
+                count += 1
+                self.__progressBar.SetValue(count)
+            # cast vectors length
+            self.__allData  = [d[:vectLen] for d in data]
+        # warn unread files
+        if len(unreadFiles):
+            dlg = wx.MessageDialog(self, "The following files were skipped because an error is encountered upon reading.\n%s\n"%("\n".join(unreadFiles)),
+                  "Files skipped", wx.OK|wx.ICON_WARNING)
+            result = dlg.ShowModal()
+            dlg.Destroy()
+        # set used data
         self.__set_used_data()
         # reset calculations
         self.initialize_analysis_data()
@@ -1121,7 +1268,64 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
         self.initialize_data_manipulation()
         # reset progress bar
         self.__progressBar.SetValue(len(self.__files))    
-            
+   
+    def on_compare_selected_data(self, event):
+        if not len(self.__allData):
+            warnings.warn("must load data first.")
+            dlg = wx.MessageDialog(self, "must load data first.",
+                  "No data found", wx.OK|wx.ICON_WARNING)
+            result = dlg.ShowModal()
+            dlg.Destroy()
+            return
+        selected = sorted(self.__filesWid.GetSelections())
+        if not len(selected):
+            warnings.warn("must select data files first.")
+            dlg = wx.MessageDialog(self, "must select data files first.",
+                  "No selection found", wx.OK|wx.ICON_WARNING)
+            result = dlg.ShowModal()
+            dlg.Destroy()
+            return
+        # plot data
+        data   = [self.__usedData[idx] for idx in selected]
+        labels = []
+        for idx in selected:
+            p, fn = os.path.split(self.__files[idx])
+            if len(fn):
+                labels.append(fn)
+            else:
+                labels.append(p)
+        plot = PlotFigure(parent=self, title="raw data",
+                          plotTitle = "raw data",
+                          mapOptions=False, compareOptions=True)
+        # compare data  
+        plot.compare_vectors(data, labels=labels)                  
+        plot.Show()                 
+    
+    def on_plot_selected_data(self, event):
+        if not len(self.__allData):
+            warnings.warn("must load data first.")
+            dlg = wx.MessageDialog(self, "must load data first.",
+                  "No data found", wx.OK|wx.ICON_WARNING)
+            result = dlg.ShowModal()
+            dlg.Destroy()
+            return
+        selected = sorted(self.__filesWid.GetSelections())
+        if not len(selected):
+            warnings.warn("must select data files first.")
+            dlg = wx.MessageDialog(self, "must select data files first.",
+                  "No selection found", wx.OK|wx.ICON_WARNING)
+            result = dlg.ShowModal()
+            dlg.Destroy()
+            return
+        # vertical stack data
+        data = np.vstack([self.__usedData[idx] for idx in selected])
+        # plot data
+        plot = PlotFigure(parent=self, title="raw data",
+                          plotTitle = "raw data",
+                          mapOptions=True)
+        plot.plot_image(data, extent=(0,100,0,100), axis='on')
+        plot.Show()
+        
     def on_plot_data(self, event):
         if not len(self.__allData):
             warnings.warn("must load data first.")
@@ -1279,11 +1483,6 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
 class MyApp(wx.App):
     def OnInit(self):
         frame = MainFrame(None, -1, 'Ranked data analysis ( B. Aoun et al )')
-        # populate files automatically
-        path = "C:\\Users\\aoun\\Documents\\collaboration\\zonghai\\diffraction_11IDC_10APR2014\\mixed"
-        files = [os.path.join(path,fn) for fn in next(os.walk(path))[2] if ".chi" in fn]
-        frame.populate_files([files[idx] for idx in range(0, len(files), 30)])
-        frame.on_chi_file_parameter(None)
         frame.Show(True)
         return True
 
