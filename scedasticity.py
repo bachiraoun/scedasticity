@@ -1256,7 +1256,7 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
                 # update widget
                 self.__filesWid.Clear()
                 if self.__readColumnWise:
-                    [self.__filesWid.Insert("%i --> "%idx+"matrix data loaded column wise, idx) for idx in range(len(self.__allData))]
+                    [self.__filesWid.Insert("%i --> "%idx+"matrix data loaded column wise", idx) for idx in range(len(self.__allData))]
                 else: 
                     [self.__filesWid.Insert("%i --> "%idx+"matrix data loaded row wise", idx) for idx in range(len(self.__allData))]
                              
@@ -1514,6 +1514,11 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
 class MyApp(wx.App):
     def OnInit(self):
         frame = MainFrame(None, -1, 'Ranked data analysis ( B. Aoun et al )')
+        # populate files automatically
+        #path = "C:\\Users\\aoun\\Documents\\collaboration\\zonghai\\diffraction_11IDC_10APR2014\\mixed"
+        #files = [os.path.join(path,fn) for fn in next(os.walk(path))[2] if ".chi" in fn]
+        #frame.populate_files([files[idx] for idx in range(0, len(files), 30)])
+        #frame.on_chi_file_parameter(None)
         frame.Show(True)
         return True
 
