@@ -283,10 +283,10 @@ class PlotFigure(wx.Dialog):
        
     def on_export_data(self, event):
         dialog = wx.FileDialog(parent=self, 
-                                       message="Save Data", 
-                                       defaultDir="", 
-                                       defaultFile="", 
-                                       style= wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT)
+                               message="Save Data", 
+                               defaultDir="", 
+                               defaultFile="", 
+                               style= wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT)
         returned = dialog.ShowModal() 
         globals()["DEFAULT_DIR"] = dialog.GetDirectory()
         dialog.Destroy()        
@@ -516,11 +516,12 @@ class MainFrame(wx.Frame):
         self.__filesInterval          = 1
         self.__scedasticityWindowSize = 25
         # initialize read parameters
-        self.__comment     = "#"
-        self.__delimiter   = " "
-        self.__headerLines = 0
-        self.__footerLines = 0
-        self.__useColumn   = 0
+        self.__comment        = "#"
+        self.__delimiter      = " "
+        self.__headerLines    = 0
+        self.__footerLines    = 0
+        self.__useColumn      = 0
+        self.__readColumnWise = True
         # create main panel
         self.__panel = wx.Panel(self, -1, style=wx.SIMPLE_BORDER)
         # create menubar
@@ -666,6 +667,12 @@ class MainFrame(wx.Frame):
         wid = Widget(parent=panel, title="Data column", widget=self.__useColumnWid, help = "Select the data column to use. FIRST COLUMN IS 0")
         loadBoxSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
         self.Bind(wx.EVT_TEXT, self.on_use_column, self.__useColumnWid)
+        # create use column
+        self.__readColumnWiseWid = wx.CheckBox(panel)
+        self.__readColumnWiseWid.SetValue(self.__readColumnWise)
+        wid = Widget(parent=panel, title="Column wise", widget=self.__readColumnWiseWid, help = "Set whether to read matrix column or row wise. When checked column wise is activated, which means every column of matrix data file will be considered as a data file.")
+        loadBoxSizer.Add(wid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        self.Bind(wx.EVT_CHECKBOX, self.on_read_column_wise, self.__readColumnWiseWid)
         ########################  add all to mainSizer  ########################
         mainSizer.Add(listCtrlSizer, proportion=1, flag=wx.ALL|wx.EXPAND, border=2)
         mainSizer.Add(loadBoxSizer, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
@@ -973,6 +980,8 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
             files = [os.path.normpath(str(p)) for p in dialog.GetPaths()]
         else:
             return
+        # set matrixFile flag
+        self.__matrixFile = True
         # update widget
         self.populate_files(files)
         # Set active
@@ -981,11 +990,10 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
         self.__headerLinesWid.Enable(True)
         self.__footerLinesWid.Enable(True)
         self.__useColumnWid.Enable(False)
-        # set matrixFile flag
-        self.__matrixFile = True
+        self.__readColumnWiseWid.Enable(True)
         # set plot options enabled
-        self.__compareSelectedDataBut.Enable(not self.__matrixFile)
-        self.__plotSelectedDataBut.Enable(not self.__matrixFile)
+        #self.__compareSelectedDataBut.Enable(not self.__matrixFile)
+        #self.__plotSelectedDataBut.Enable(not self.__matrixFile)
             
     def on_browse_files(self, event):
         # create browsing dialog
@@ -1007,6 +1015,8 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
             files = [os.path.normpath(str(p)) for p in dialog.GetPaths()]
         else:
             return
+        # set matrixFile flag
+        self.__matrixFile = False
         # update widget
         self.populate_files(files)
         # Set active
@@ -1015,11 +1025,10 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
         self.__headerLinesWid.Enable(True)
         self.__footerLinesWid.Enable(True)
         self.__useColumnWid.Enable(True)
-        # set matrixFile flag
-        self.__matrixFile = False
+        self.__readColumnWiseWid.Enable(False)
         # set plot options enabled
-        self.__compareSelectedDataBut.Enable(not self.__matrixFile)
-        self.__plotSelectedDataBut.Enable(not self.__matrixFile)
+        #self.__compareSelectedDataBut.Enable(not self.__matrixFile)
+        #self.__plotSelectedDataBut.Enable(not self.__matrixFile)
     
     def populate_files(self, files):
         # check files
@@ -1030,15 +1039,14 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
         [self.__filesWid.Insert("%i --> "%idx+str(self.__files[idx]), idx) for idx in range(len(self.__files))]
         # enable buttons
         self.__LoadData.Enable(len(self.__files))
-        self.__invertFilesWid.Enable(len(self.__files))
-        self.__invertFilesWid.Enable(len(self.__files))
+        self.__invertFilesWid.Enable(len(self.__files) and not self.__matrixFile)
         
     def on_files_selection(self, event):
         # get selection
         selected = sorted( self.__filesWid.GetSelections() )
         # enable buttons
-        self.__discardFileWid.Enable(len(selected))
-        if not len(selected):
+        self.__discardFileWid.Enable(len(selected) and not self.__matrixFile)
+        if not len(selected) or self.__matrixFile:
             self.__moveUpWid.Enable(False)
             self.__moveDownWid.Enable(False)
         else:
@@ -1093,6 +1101,9 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
         else:            
             self.__useColumn = val
     
+    def on_read_column_wise(self, event):
+        self.__readColumnWise = self.__readColumnWiseWid.GetValue()
+        
     def on_scedasticity_window_size(self, event):
         try:
             val = event.GetEventObject().GetValue()
@@ -1235,7 +1246,20 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
                 warnings.warn("file %s can't be read. %s"%(f,e))
             else:
                 # cast vectors length
-                self.__allData  = [d[idx,:] for idx in range(d.shape[0])]
+                if self.__readColumnWise:
+                    self.__allData = [d[idx,:] for idx in range(d.shape[0])]
+                else:
+                    self.__allData = [d[:,idx] for idx in range(d.shape[1])]
+                
+                # create files list    
+                #self.__files = [f for f in files if os.path.isfile(f) and os.access(f, os.R_OK)]
+                # update widget
+                self.__filesWid.Clear()
+                if self.__readColumnWise:
+                    [self.__filesWid.Insert("%i --> "%idx+"matrix data loaded column wise, idx) for idx in range(len(self.__allData))]
+                else: 
+                    [self.__filesWid.Insert("%i --> "%idx+"matrix data loaded row wise", idx) for idx in range(len(self.__allData))]
+                             
         # load vector files
         else:
             for f in self.__files:
@@ -1296,7 +1320,7 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
         data   = [self.__usedData[idx] for idx in selected]
         labels = []
         for idx in selected:
-            p, fn = os.path.split(self.__files[idx])
+            p, fn = os.path.split(self.__filesWid.GetString(idx))
             if len(fn):
                 labels.append(fn)
             else:
@@ -1490,6 +1514,7 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
 class MyApp(wx.App):
     def OnInit(self):
         frame = MainFrame(None, -1, 'Ranked data analysis ( B. Aoun et al )')
+        frame.Show(True)
         return True
 
 app = MyApp(0)
