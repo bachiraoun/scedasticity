@@ -12,6 +12,7 @@ except:
 # import wx
 try:
     import wx
+    #import wx.lib.agw.supertooltip as STT
 except:
     raise Exception("wx library is not installed")
 # import matplotlib
@@ -98,7 +99,19 @@ def GET_INDEX_RANGE_FROM_STRING(valStr):
             newStr += "%i, "%v
         return newStr, val 
     
-    
+def GET_PARAGRAPH_FORMATED(paragraph, nchar = 50):    
+    para      = paragraph.split()
+    paragraph = ""
+    sentence  = ""
+    for word in para:
+        if len(sentence) >= nchar:
+            paragraph += sentence + "\n"
+            sentence = ""
+        sentence += " "+word
+    paragraph += sentence
+    return paragraph
+        
+               
 class Widget(wx.BoxSizer):
     def __init__(self, parent, title, widget, help=""):
         # check parent
@@ -118,14 +131,33 @@ class Widget(wx.BoxSizer):
         title = str(title)
         if len(title):
             title = wx.StaticText(parent=parent, id=-1, label=title, style=wx.ALIGN_LEFT)
-            title.SetToolTip( wx.ToolTip("%s"%(help)) )
+            par = GET_PARAGRAPH_FORMATED("%s"%(help), 50)
+            title.SetToolTip( wx.ToolTip(par) )
+            #ttp = STT.SuperToolTip(par, footer=" ")
+            #ttp.SetTarget(title)
+            #ttp.SetDrawHeaderLine(True)
+            #ttp.SetHeader("Help")
+            #ttp.ApplyStyle("Office 2007 Blue")
+            #ttp.SetStartDelay(0.5)
             self.Add( title, **labelSiserKwargs)
             self.AddSpacer(spacer)
         else:
             title = None
-            widget.SetToolTip( wx.ToolTip("%s"%(help)) )
+            par = GET_PARAGRAPH_FORMATED("%s"%(help))
+            #ttp = STT.SuperToolTip(par, footer=" ")
+            #ttp.SetTarget(title)
+            #ttp.SetDrawHeaderLine(True)
+            #ttp.SetHeader("Help")
+            #ttp.ApplyStyle("Office 2007 Blue")
+            #ttp.SetStartDelay(0.5)
+        #self.__ttp = ttp
         # add widget to self
+        #title.Bind(wx.EVT_LEAVE_WINDOW, self._on_focus)
         self.Add( widget, **widgetSiserKwargs)
+    
+    def _on_focus(self, event):
+        if event.GetEventObject() is self.__ttp.GetTarget():
+            self.__ttp.DoHideNow()
 
 
 
@@ -195,6 +227,8 @@ class PlotFigure(wx.Dialog):
         wx.Dialog.__init__(self, parent=parent, title=title, style=wx.DEFAULT_DIALOG_STYLE|wx.RESIZE_BORDER|wx.MAXIMIZE_BOX|wx.MINIMIZE_BOX)
         self.__sizer = wx.BoxSizer(wx.VERTICAL)
         toolbarSizer = wx.BoxSizer(wx.HORIZONTAL)
+        # set background color
+        self.SetBackgroundColour(wx.WHITE)
         # slider settings
         self.__sliderMax = 1000
         # initialize data
@@ -207,7 +241,7 @@ class PlotFigure(wx.Dialog):
         self.__offsetMaximum = 1
         self.__offsetPercent = 0
         # create figure, axes and canvas
-        self.__figure = Figure()
+        self.__figure = Figure(facecolor='white')
         self.__axes = self.__figure.add_subplot(111)
         self.__axes.set_title(str(plotTitle))
         self.__canvas = FigureCanvas(self, -1, self.__figure)
@@ -473,7 +507,7 @@ critical information from series of ranked correlated data. \
 The method is generally applicable to all types of spectra evolving \
 as a function of any arbitrary parameter. This approach is based on \
 correlation functions and statistical scedasticity formalism."
-        description = self.get_paragraph_formated(description)
+        description = GET_PARAGRAPH_FORMATED(description)
         description = wx.StaticText(self, -1, description,(30,15), style=wx.ALIGN_CENTRE) 
         descriptionFont = wx.Font(12, wx.MODERN, wx.NORMAL, wx.NORMAL)
         description.SetFont(descriptionFont) 
@@ -487,17 +521,7 @@ correlation functions and statistical scedasticity formalism."
         vbox.Add(paper, 0, wx.ALIGN_CENTER|wx.TOP, 2)
         self.SetSizer(vbox)
         
-    def get_paragraph_formated(self, paragraph, nchar = 50):    
-        para      = paragraph.split()
-        paragraph = ""
-        sentence  = ""
-        for word in para:
-            if len(sentence) >= nchar:
-                paragraph += sentence + "\n"
-                sentence = ""
-            sentence += " "+word
-        paragraph += sentence
-        return paragraph
+    
         
         
 class MainFrame(wx.Frame):
@@ -585,8 +609,10 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_BUTTON, self.on_compare_selected_data, self.__compareSelectedDataBut)
         self.__compareSelectedDataBut.SetToolTip( wx.ToolTip("Plot selected files as lines.") )
         correlation = wx.Button(self.__panel, -1, label="Correlation")
+        correlation.SetToolTip( wx.ToolTip("Compute correlation.") )
         self.Bind(wx.EVT_BUTTON, self.on_compute_correlation, correlation)
         scedasticity = wx.Button(self.__panel, -1, label="Scedasticity")
+        scedasticity.SetToolTip( wx.ToolTip("Compute scedasticity.") )
         self.Bind(wx.EVT_BUTTON, self.on_compute_scedasticity, scedasticity)
         horizontalSizer.Add(self.__plotSelectedDataBut, proportion=0, flag=wx.ALL, border=2)
         horizontalSizer.Add(self.__compareSelectedDataBut, proportion=0, flag=wx.ALL, border=2)
@@ -1244,6 +1270,10 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
             except Exception as e:
                 unreadFiles.append(f)
                 warnings.warn("file %s can't be read. %s"%(f,e))
+                dlg = wx.MessageDialog(self, "file %s can't be read. %s"%(f,e),
+                                             "Reading error", wx.OK|wx.ICON_ERROR)
+                result = dlg.ShowModal()
+                dlg.Destroy()
             else:
                 # cast vectors length
                 if self.__readColumnWise:
@@ -1262,6 +1292,7 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
                              
         # load vector files
         else:
+            warnMsgs = []
             for f in self.__files:
                 try:
                     d = np.genfromtxt(f, dtype    = np.float32,
@@ -1273,18 +1304,34 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
                     assert len(d), "file must have data"
                 except Exception as e:
                     unreadFiles.append(f)
-                    warnings.warn("file %s can't be read. %s"%(f,e))
+                    message = "file %s can't be read. %s"%(f,e)
+                    warnings.warn(message)
+                    warnMsgs.append(message)     
                 else:
                     if vectLen is None:
                         vectLen = len(d)
                     elif vectLen != len(d):
-                        warnings.warn("file %s length is found to be different than the rest of files"%(f))
+                        message = "file %s length is found to be different than the rest of files"%(f)
+                        warnings.warn(message)
+                        warnMsgs.append(message)
                     data.append(d)
                 # update progress    
                 count += 1
                 self.__progressBar.SetValue(count)
             # cast vectors length
             self.__allData  = [d[:vectLen] for d in data]
+            # warn when needed
+            if len(warnMsgs):
+                message = ""
+                if len(warnMsgs)>3: 
+                    warnMsgs=[warnMsgs[idx] for idx in range(3)]
+                    message = "ONLY FIRST 3 WARNINGS ARE SHOWN HERE, PLEASE LOOK AT TERMINAL \n\n"
+                for m in warnMsgs:
+                    message += m + "\n"                
+                dlg = wx.MessageDialog(self, message,
+                      "No data found", wx.OK|wx.ICON_WARNING)
+                result = dlg.ShowModal()
+                dlg.Destroy()
         # warn unread files
         if len(unreadFiles):
             dlg = wx.MessageDialog(self, "The following files were skipped because an error is encountered upon reading.\n%s\n"%("\n".join(unreadFiles)),
@@ -1474,6 +1521,9 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
             self.__scedasticity = np.vstack(correlation)
         # vertical stack data
         data = np.array( self.__scedasticity )
+        # normalize between 0 and 1
+        data -= np.nanmin( data )
+        data /= np.nanmax( data )
         # plot data
         plot = PlotFigure(parent=self, title="scedasticity", 
                           plotTitle="interval %i - window %i"%(self.__filesInterval, self.__scedasticityWindowSize),
@@ -1511,19 +1561,6 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
         
         
         
-class MyApp(wx.App):
-    def OnInit(self):
-        frame = MainFrame(None, -1, 'Ranked data analysis ( B. Aoun et al )')
-        # populate files automatically
-        #path = "C:\\Users\\aoun\\Documents\\collaboration\\zonghai\\diffraction_11IDC_10APR2014\\mixed"
-        #files = [os.path.join(path,fn) for fn in next(os.walk(path))[2] if ".chi" in fn]
-        #frame.populate_files([files[idx] for idx in range(0, len(files), 30)])
-        #frame.on_chi_file_parameter(None)
-        frame.Show(True)
-        return True
-
-app = MyApp(0)
-app.MainLoop()  
 
 
 
