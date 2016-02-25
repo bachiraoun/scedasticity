@@ -252,6 +252,8 @@ class PlotFigure(wx.Dialog):
         #replot = wx.Button(self, -1, label="Re-plot")
         #self.Bind(wx.EVT_BUTTON, self.on_replot, replot)
         # export data button
+        self.__exportColumnWiseWid = wx.CheckBox(self, -1, label="Export column wise")
+        self.__exportColumnWiseWid.SetValue(False)
         exportData = wx.Button(self, -1, label="Export data")
         self.Bind(wx.EVT_BUTTON, self.on_export_data, exportData)
         # add figure to sizer
@@ -261,6 +263,7 @@ class PlotFigure(wx.Dialog):
         toolbarSizer.AddSpacer(20)
         #toolbarSizer.Add(replot, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
         toolbarSizer.Add(exportData, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
+        toolbarSizer.Add(self.__exportColumnWiseWid, proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
         self.__sizer.Add(toolbarSizer,  proportion=0, flag=wx.ALL|wx.EXPAND, border=2)
         # add map options
         if mapOptions:
@@ -329,7 +332,11 @@ class PlotFigure(wx.Dialog):
         # get and format fname
         fname = dialog.GetPath()
         # export data
-        np.savetxt(fname, self.__usedData, fmt='%.8e', delimiter='  ', 
+        if self.__exportColumnWiseWid.IsChecked():
+            data = np.transpose(self.__usedData)
+        else:
+            data = self.__usedData
+        np.savetxt(fname, data, fmt='%.8e', delimiter='  ', 
                    newline='\n', 
                    header="B. Aoun et al; Journal of Power Sources 279 (2015) 246-251", 
                    footer='', 
@@ -365,7 +372,7 @@ class PlotFigure(wx.Dialog):
         self.__axes.set_ylabel(yLabel)
         self.__axes.get_yaxis().set_tick_params(direction=ticksDirection)
         self.__axes.get_xaxis().set_tick_params(direction=ticksDirection)
-        self.__axes.legend(ncol = int(len(self.__labels)/10.)+1)
+        self.__axes.legend(ncol = int(len(self.__labels)/10.)+1, frameon=False)
         
     def plot_image(self, data, extent=(0,100,0,100), colormap="jet",
                          axis='on', origin="lower",
@@ -545,7 +552,7 @@ class MainFrame(wx.Frame):
         self.__headerLines    = 0
         self.__footerLines    = 0
         self.__useColumn      = 0
-        self.__readColumnWise = True
+        self.__readColumnWise = False
         # create main panel
         self.__panel = wx.Panel(self, -1, style=wx.SIMPLE_BORDER)
         # create menubar
@@ -1276,7 +1283,7 @@ e.g. np.sin(dataFile) # computes the sin function of all data.",
                 dlg.Destroy()
             else:
                 # cast vectors length
-                if self.__readColumnWise:
+                if not self.__readColumnWise:
                     self.__allData = [d[idx,:] for idx in range(d.shape[0])]
                 else:
                     self.__allData = [d[:,idx] for idx in range(d.shape[1])]
