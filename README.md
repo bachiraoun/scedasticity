@@ -12,6 +12,7 @@ Python 2.7.x, wxPython, numpy and matplotlib
 ## Installation
 No installation is needed. Just copy the whole repository and run launch.py as the following 'python launch.py'
 
+N.B. On windows you might need to add python directory and python/scripts to the system's path global variables
 
 ## Author
 Bachir Aoun
