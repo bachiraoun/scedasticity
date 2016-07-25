@@ -10,7 +10,7 @@ Python 2.7.x, wxPython, numpy and matplotlib
 * install numpy and matplotlib using pip command. e.g. pip install numpy
 
 ## Installation
-No installation is needed. Just copy the whole repository and run launch.py 
+No installation is needed. Just copy the whole repository and run launch.py as the following 'python launch.py'
 
 
 ## Author
