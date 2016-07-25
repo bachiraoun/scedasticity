@@ -1,1 +1,1 @@
-start python scedasticity.py
+start python launch.py
