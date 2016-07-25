@@ -5,10 +5,13 @@ The method is generally applicable to all types of spectra evolving as a functio
 This approach is based on correlation functions and statistical scedasticity formalism.
 
 ## Requirements
-Python 2.7, wxPython, numpy and matplotlib
+Python 2.7.x, wxPython, numpy and matplotlib
+* Locate wxPython using this link (https://wxpython.org/download.php) download and install
+* install numpy and matplotlib using pip command. e.g. pip install numpy
 
 ## Installation
-No installation is needed. 
+No installation is needed. Just copy the whole repository and run launch.py 
+
 
 ## Author
 Bachir Aoun
