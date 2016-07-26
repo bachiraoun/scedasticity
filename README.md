@@ -9,7 +9,7 @@ Python 2.7.x, wxPython, numpy and matplotlib
 * Locate wxPython using this link (https://wxpython.org/download.php) download and install the appropriate executable
 * install numpy and matplotlib using pip or other methods
 
-Installing using pip
+Installing using pip from the command line
 ```bash
 pip install numpy
 pip install matplotlib
