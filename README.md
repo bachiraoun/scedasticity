@@ -6,8 +6,14 @@ This approach is based on correlation functions and statistical scedasticity for
 
 ## Requirements
 Python 2.7.x, wxPython, numpy and matplotlib
-* Locate wxPython using this link (https://wxpython.org/download.php) download and install
-* install numpy and matplotlib using pip command. e.g. pip install numpy
+* Locate wxPython using this link (https://wxpython.org/download.php) download and install the appropriate executable
+* install numpy and matplotlib using pip or other methods
+
+Installing using pip
+```bash
+pip install numpy
+pip install matplotlib
+```
 
 ## Installation
 No installation is needed. Just copy the whole repository and run launch.py as the following 'python launch.py'
